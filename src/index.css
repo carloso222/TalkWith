@@ -1,0 +1,67 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+@import "tailwindcss";
+
+/*
+  Tokens del sistema de diseño de Figma (página "Sistema de diseño").
+  Úsalos como clases de Tailwind: bg-base, bg-panel, text-muted, border-line, bg-primary, text-voice...
+*/
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+
+  --color-base: #0f172a;          /* bg/base — fondo principal */
+  --color-panel: #1e293b;         /* bg/panel — columnas y tarjetas */
+  --color-raised: #273449;        /* bg/raised — campos y hover */
+  --color-line: #334155;          /* border/default — divisores */
+  --color-primary: #6366f1;       /* brand/primary — acciones principales */
+  --color-primary-active: #4f46e5;/* brand/primary-active — presionado */
+  --color-voice: #22d3ee;         /* accent/voice — habla y subtítulos */
+  --color-online: #22c55e;        /* status/online — en línea, aceptado */
+  --color-recording: #ef4444;     /* status/recording — grabar, salir, eliminar */
+  --color-warning: #f59e0b;       /* status/warning — reconexión, pendiente */
+  --color-fg: #f8fafc;            /* text/primary */
+  --color-muted: #94a3b8;         /* text/secondary — metadatos */
+
+  /* Escala tipográfica del Figma (tamaño / interlineado) */
+  --text-display: 2rem;      --text-display--line-height: 2.5rem;   /* 32/40 Bold */
+  --text-title: 1.5rem;      --text-title--line-height: 2rem;       /* 24/32 Bold */
+  --text-heading: 1.25rem;   --text-heading--line-height: 1.75rem;  /* 20/28 Semibold */
+  --text-subtitle: 1rem;     --text-subtitle--line-height: 1.5rem;  /* 16/24 Semibold */
+  --text-body: 0.9375rem;    --text-body--line-height: 1.375rem;    /* 15/22 */
+  --text-small: 0.875rem;    --text-small--line-height: 1.25rem;    /* 14/20 */
+  --text-caption: 0.75rem;   --text-caption--line-height: 1rem;     /* 12/16 Medium */
+
+  --shadow-low: 0 1px 2px rgb(2 6 23 / 0.4), 0 2px 6px rgb(2 6 23 / 0.25);
+  --shadow-high: 0 12px 32px rgb(2 6 23 / 0.55), 0 2px 8px rgb(2 6 23 / 0.35);
+}
+
+@layer base {
+  html, body, #root { height: 100%; }
+  body {
+    @apply bg-base text-fg font-sans text-body antialiased;
+  }
+  :focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 2px;
+  }
+  ::selection { background: rgb(99 102 241 / 0.35); }
+}
+
+@keyframes toast-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes dialog-in {
+  from { opacity: 0; transform: translateY(6px) scale(0.98); }
+  to   { opacity: 1; transform: none; }
+}
+@keyframes typing {
+  0%, 60%, 100% { opacity: 0.3; transform: translateY(0); }
+  30% { opacity: 1; transform: translateY(-2px); }
+}
+
+@utility animate-toast-in { animation: toast-in 180ms ease-out; }
+@utility animate-dialog-in { animation: dialog-in 160ms ease-out; }
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 1ms !important; transition-duration: 1ms !important; }
+}
