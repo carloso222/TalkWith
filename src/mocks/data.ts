@@ -59,12 +59,27 @@ export const canales: Canal[] = [
   { canalId: 'sala-principal', servidorId: 'estudio-diseno', nombre: 'Sala principal', tipo: 'voz' },
   { canalId: 'critica-portafolio', servidorId: 'estudio-diseno', nombre: 'Crítica de portafolio', tipo: 'voz' },
   { canalId: 'cabina-silenciosa', servidorId: 'estudio-diseno', nombre: 'Cabina silenciosa', tipo: 'voz' },
+  { canalId: 'lectura-general', servidorId: 'club-lectura', nombre: 'general', tipo: 'texto', descripcion: 'Charla del libro del mes' },
+  { canalId: 'lectura-viernes', servidorId: 'club-lectura', nombre: 'Charla de viernes', tipo: 'voz' },
+  { canalId: 'dev-general', servidorId: 'dev-latam', nombre: 'general', tipo: 'texto', descripcion: 'Dudas y avisos de la comunidad' },
+  { canalId: 'dev-pair', servidorId: 'dev-latam', nombre: 'Pair programming', tipo: 'voz' },
+  { canalId: 'foto-general', servidorId: 'foto-musica', nombre: 'general', tipo: 'texto', descripcion: 'Fotos y playlists' },
+  { canalId: 'foto-escucha', servidorId: 'foto-musica', nombre: 'Sala de escucha', tipo: 'voz' },
 ]
 
 /** Quién está conectado en cada canal de voz (presencia simulada). */
 export const enLlamada: Record<string, string[]> = {
   'sala-principal': ['u-sofia', 'u-mateo', 'u-diego'],
 }
+
+/** Quién está silenciado dentro de una llamada. */
+export const silenciados: string[] = ['u-diego']
+
+/** Sesión en curso (con subtítulos en vivo) de cada canal de voz. */
+export const sesionEnVivo: Record<string, string> = { 'sala-principal': 's1' }
+
+/** Canales de texto cuyas menciones ya estaban leídas al iniciar. */
+export const canalesLeidos: string[] = ['general']
 
 export const mensajes: Mensaje[] = [
   { mensajeId: 'msg1', canalId: 'general', autorUid: 'u-sofia', creadoEn: '10:42', contenido: 'Subí la nueva versión del flujo de onboarding. ¿Alguien la revisa antes de la crítica?', adjunto: { tipo: 'archivo', titulo: 'onboarding-v3.fig', detalle: 'Archivo de Figma, 4.2 MB' } },
@@ -74,6 +89,7 @@ export const mensajes: Mensaje[] = [
   { mensajeId: 'msg5', canalId: 'general', autorUid: 'u-valeria', creadoEn: '11:58', contenido: 'Yo llevo la rúbrica impresa.' },
   { mensajeId: 'msg6', canalId: 'general', autorUid: 'u-valeria', creadoEn: '11:59', contenido: 'Y reservé Sala principal de 4 a 5 para que nadie se quede fuera.' },
   { mensajeId: 'msg7', canalId: 'general', autorUid: 'u-isaian', creadoEn: '12:10', contenido: '@Carlos ya está la grabación de ayer en el historial, por si quieres revisar los comentarios de Lucía.', menciones: ['u-carlos'] },
+  { mensajeId: 'msg8', canalId: 'entregas', autorUid: 'u-diego', creadoEn: '11:50', contenido: '@Carlos ¿puedes revisar el avance de la entrega 3 antes de las 4?', menciones: ['u-carlos'] },
 ]
 
 export const sesiones: SesionVoz[] = [

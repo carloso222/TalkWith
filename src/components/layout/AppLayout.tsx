@@ -1,5 +1,4 @@
 import { Outlet, useLocation, useParams } from 'react-router'
-import { DEFAULT_SERVER } from '../../lib/routes'
 import { channelService, serverService } from '../../services'
 import ChannelSidebar from './ChannelSidebar'
 import DemoPanel from './DemoPanel'
@@ -26,7 +25,7 @@ const titulos: [RegExp, string][] = [
 export default function AppLayout() {
   const { serverId, channelId } = useParams()
   const { pathname } = useLocation()
-  const servidorActivo = serverId ?? DEFAULT_SERVER
+  const servidorActivo = serverId ?? serverService.defaultId()
   const canal = channelId ? channelService.find(channelId) : undefined
   const enCanal = Boolean(canal)
 

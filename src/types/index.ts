@@ -138,3 +138,16 @@ export interface Toast {
   titulo: string
   descripcion?: string
 }
+
+export interface ResumenInicio {
+  llamada: {
+    servidorId: string
+    canalId: string
+    canalNombre: string
+    participantes: string[]
+    subtitulo?: { hablanteUid: string; texto: string }
+  } | null
+  sesionesNuevas: number
+  /** Servidor por defecto del usuario (el primero al que pertenece). */
+  servidorId: string
+}

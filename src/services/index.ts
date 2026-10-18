@@ -10,7 +10,7 @@
  * Úsalos en componentes con el hook `useService` (src/hooks/useService.ts).
  */
 import * as db from '../mocks/data'
-import type { Canal, Grabacion, Mensaje, Miembro, Servidor, SesionVoz, Usuario } from '../types'
+import type { Canal, Grabacion, Mensaje, Miembro, ResumenInicio, Servidor, SesionVoz, Usuario } from '../types'
 
 const LATENCIA_MS = 250
 
@@ -35,6 +35,7 @@ export const serverService = {
   getById: (id: string) => simular(db.servidores.find((s) => s.servidorId === id) ?? null),
   find: (id: string): Servidor | undefined => db.servidores.find((s) => s.servidorId === id),
   list: (): Servidor[] => db.servidores,
+  defaultId: (uid: string = db.CURRENT_UID): string => db.miembros.find((m) => m.uid === uid)?.servidorId ?? '',
 }
 
 /* ---------- Miembros y roles ---------- */
@@ -51,6 +52,11 @@ export const channelService = {
   listByServer: (servidorId: string): Canal[] => db.canales.filter((c) => c.servidorId === servidorId),
   find: (canalId: string): Canal | undefined => db.canales.find((c) => c.canalId === canalId),
   inCall: (canalId: string): string[] => db.enLlamada[canalId] ?? [],
+  isMuted: (uid: string): boolean => db.silenciados.includes(uid),
+  /** Menciones al usuario en un canal, contadas a partir de los mensajes. */
+  mentions: (canalId: string, uid: string = db.CURRENT_UID): number =>
+    db.mensajes.filter((m) => m.canalId === canalId && m.menciones?.includes(uid)).length,
+  readIds: (): string[] => db.canalesLeidos,
 }
 
 /* ---------- Mensajes ---------- */
@@ -102,5 +108,29 @@ export const searchService = {
       .filter((x) => x.puntos > 0)
       .sort((a, b) => b.puntos - a.puntos)
     return simular(puntuados.map((x) => x.r))
+  },
+}
+
+/* ---------- Resumen de Inicio ---------- */
+export const dashboardService = {
+  getResumen: (uid: string = db.CURRENT_UID): Promise<ResumenInicio> => {
+    const ids = db.miembros.filter((m) => m.uid === uid).map((m) => m.servidorId)
+    const canal = db.canales.find(
+      (c) => c.tipo === 'voz' && ids.includes(c.servidorId) && (db.enLlamada[c.canalId]?.length ?? 0) > 0,
+    )
+    let llamada: ResumenInicio['llamada'] = null
+    if (canal) {
+      const segs = db.segmentos.filter((g) => g.sesionId === db.sesionEnVivo[canal.canalId])
+      const ultimo = segs[segs.length - 1]
+      llamada = {
+        servidorId: canal.servidorId,
+        canalId: canal.canalId,
+        canalNombre: canal.nombre,
+        participantes: db.enLlamada[canal.canalId],
+        subtitulo: ultimo ? { hablanteUid: ultimo.hablanteUid, texto: ultimo.texto } : undefined,
+      }
+    }
+    const sesionesNuevas = db.sesiones.filter((s) => ids.includes(s.servidorId) && /^(Hoy|Ayer)/.test(s.inicio)).length
+    return simular({ llamada, sesionesNuevas, servidorId: llamada?.servidorId ?? ids[0] ?? '' })
   },
 }
