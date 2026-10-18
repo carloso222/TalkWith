@@ -2,7 +2,7 @@ import { cn } from '../../lib/cn'
 import { userService } from '../../services'
 import type { EstadoPresencia } from '../../types'
 
-const tamanos = { xs: 'size-6 text-[10px]', sm: 'size-8 text-caption', md: 'size-10 text-small', lg: 'size-24 text-title' }
+const tamanos = { xs: 'size-6 text-[10px]', sm: 'size-8 text-caption', md: 'size-10 text-small', lg: 'size-16 text-heading', xl: 'size-24 text-title' }
 const punto = { 'en-linea': 'bg-online', ausente: 'bg-warning', desconectado: 'bg-muted' }
 
 interface Props {
@@ -28,7 +28,7 @@ export default function Avatar({ uid, size = 'md', presencia, hablando, classNam
         {u.iniciales}
       </span>
       {presencia && (
-        <span className={cn('absolute -right-0.5 -bottom-0.5 size-3 rounded-full ring-[3px] ring-panel', punto[u.estado as EstadoPresencia])} />
+        <span className={cn('absolute -right-0.5 -bottom-0.5 size-3 rounded-full ring-[3px] ring-panel', size === 'xl' && 'right-1 bottom-1 size-5', punto[u.estado as EstadoPresencia])} />
       )}
     </span>
   )

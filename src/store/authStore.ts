@@ -18,6 +18,8 @@ interface AuthState {
   logout: () => void
   completarPerfil: () => void
   setRolDemo: (rol: Rol | null) => void
+  /** Actualiza el usuario en memoria (no se guarda en ningún servidor). */
+  actualizarPerfil: (cambios: Partial<Pick<Usuario, 'nombre' | 'usuario' | 'estadoTexto'>>) => void
 }
 
 const usuarioDemo = usuarios.find((u) => u.uid === CURRENT_UID)!
@@ -32,6 +34,7 @@ export const useAuthStore = create<AuthState>()(
       logout: () => set({ usuario: null, rolDemo: null }),
       completarPerfil: () => set({ usuario: usuarioDemo, perfilCompleto: true }),
       setRolDemo: (rolDemo) => set({ rolDemo }),
+      actualizarPerfil: (cambios) => set((s) => (s.usuario ? { usuario: { ...s.usuario, ...cambios } } : s)),
     }),
     {
       name: 'talkwith-auth',

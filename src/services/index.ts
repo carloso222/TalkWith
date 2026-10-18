@@ -64,11 +64,13 @@ export const sessionService = {
   getById: (sesionId: string) => simular(db.sesiones.find((s) => s.sesionId === sesionId) ?? null),
   getSegments: (sesionId: string) => simular(db.segmentos.filter((g) => g.sesionId === sesionId)),
   getConsents: (sesionId: string) => simular(db.consentimientos.filter((c) => c.sesionId === sesionId)),
+  speakingTime: (sesionId: string): Record<string, string> => db.tiempoHablado[sesionId] ?? {},
 }
 
 /* ---------- Grabaciones ---------- */
 export const recordingService = {
   getByServer: (servidorId: string): Promise<Grabacion[]> => simular(db.grabaciones.filter((g) => g.servidorId === servidorId)),
+  getBySession: (sesionId: string) => simular(db.grabaciones.find((g) => g.sesionId === sesionId) ?? null),
   /** No borra nada: la entrega pide solo mostrar la confirmación. */
   remove: (_grabacionId: string) => simular(true),
 }
@@ -78,10 +80,27 @@ export const activityService = {
   getRecent: () => simular(db.actividad),
 }
 
+/** Quita acentos y pasa a minúsculas conservando la longitud del texto. */
+export const normalizar = (s: string) => Array.from(s, (ch) => ch.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()).join('')
+
+/** Palabras con significado de una consulta ("permisos del micrófono" → permisos, microfono). */
+export const terminos = (q: string) =>
+  normalizar(q)
+    .split(/\s+/)
+    .filter((w) => w.length > 3)
+
 export const searchService = {
+  /** Búsqueda simulada sobre mensajes y transcripciones, ordenada por relevancia. */
   search: (q: string) => {
-    const term = q.trim().toLowerCase()
-    if (!term) return simular([] as typeof db.resultadosBusqueda)
-    return simular(db.resultadosBusqueda.filter((r) => r.fragmento.toLowerCase().includes(term)))
+    const palabras = terminos(q)
+    if (!palabras.length) return simular([] as typeof db.resultadosBusqueda)
+    const puntuados = db.resultadosBusqueda
+      .map((r) => {
+        const texto = normalizar(r.fragmento)
+        return { r, puntos: palabras.filter((w) => texto.includes(w)).length }
+      })
+      .filter((x) => x.puntos > 0)
+      .sort((a, b) => b.puntos - a.puntos)
+    return simular(puntuados.map((x) => x.r))
   },
 }
