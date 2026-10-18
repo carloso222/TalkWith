@@ -9,6 +9,7 @@ import Avatar from '../ui/Avatar'
 export default function UserPanel() {
   const usuario = useAuthStore((s) => s.usuario)
   const [silenciado, setSilenciado] = useState(false)
+  const textoEstado = { 'en-linea': 'En línea', ausente: 'Ausente', desconectado: 'Desconectado' }
   if (!usuario) return null
   return (
     <div className="flex h-16 items-center gap-1 border-t border-line bg-base/40 px-3">
@@ -16,7 +17,7 @@ export default function UserPanel() {
         <Avatar uid={usuario.uid} size="sm" presencia />
         <span className="flex min-w-0 flex-col">
           <span className="truncate text-small font-medium">{usuario.nombre}</span>
-          <span className="text-caption text-online">En línea</span>
+          <span className="text-caption text-online">{textoEstado[usuario.estado]}</span>
         </span>
       </Link>
       <button onClick={() => setSilenciado((v) => !v)} className="rounded-lg p-1 text-muted hover:bg-raised hover:text-fg" aria-label={silenciado ? 'Activar micrófono' : 'Silenciar micrófono'} aria-pressed={silenciado}>
