@@ -29,7 +29,7 @@ React 19, TypeScript, Vite, Tailwind CSS 4, React Router, Zustand y lucide-react
 ```
 src/
   components/
-    ui/          Button, Field, Modal, Avatar, Badge, ServerIcon, Logo
+    ui/          Button, Field, Modal, Avatar, Badge, Switch, Checkbox, Dropdown, Highlight, ServerIcon, Logo
     layout/      AppLayout, ServerBar, ChannelSidebar, TopBar, UserPanel, DemoPanel
     feedback/    ToastHost, ConfirmHost, Placeholder
   pages/         una carpeta por sección (auth, dashboard, channels, voice, history...)
@@ -87,7 +87,7 @@ Cada página que todavía no está hecha muestra un aviso **"Por construir"** co
 
 | Responsable | Pantallas | Archivos |
 |---|---|---|
-| **Carlos** | 02–03 Login ✅, 04 Registro, 18–20 Detalle de sesión, 22–23 Búsqueda, 28 Perfil + base del proyecto, rutas y guardias ✅ | `pages/auth/*`, `pages/history/DetalleSesion.tsx`, `pages/search/*`, `pages/account/*` |
+| **Carlos** | ✅ 02–03 Login, ✅ 04 Registro, ✅ 18–20 Detalle de sesión, ✅ 22–23 Búsqueda, ✅ 28 Perfil y ✅ base del proyecto, rutas y guardias | `pages/auth/*`, `pages/history/DetalleSesion.tsx`, `pages/search/*`, `pages/account/*` |
 | **Diego** | 01 Landing, 05 Inicio, 12–16 Canal de voz y grabación, 21 Grabaciones, 29 404 (base ✅) + kit de componentes y layout | `pages/public/*`, `pages/dashboard/*`, `pages/voice/*`, `pages/history/Grabaciones.tsx`, `components/ui/*`, `components/layout/*` |
 | **Isaian** | 06 Tus servidores, 07–09 Crear servidor y toasts, 08 Unirse, 10–11 Canal de texto, 17 Historial, 24–27 Configuración | `pages/servers/*`, `pages/channels/CanalTexto.tsx`, `pages/history/Sesiones.tsx`, `pages/settings/*` |
 
@@ -96,7 +96,7 @@ Cada página que todavía no está hecha muestra un aviso **"Por construir"** co
 1. **Nada de llamadas a API.** Los datos salen de `services/` (que leen `mocks/`). Si necesitas un dato nuevo, agrégalo en `mocks/data.ts` y expónlo desde un servicio.
 2. **Las confirmaciones no borran nada.** Se pregunta con `confirm()` y, si aceptan, solo se muestra un toast.
 3. **Usa los tokens del Figma.** Clases como `bg-panel`, `bg-raised`, `border-line`, `text-muted`, `bg-primary`, `text-voice` o `text-recording`, y la escala tipográfica `text-title`, `text-heading`, `text-body`, `text-small` y `text-caption`. Están definidos en `src/index.css`. Evita poner colores hex sueltos.
-4. **Reutiliza los componentes base** (`Button`, `Field`, `Modal`, `Avatar`, `Badge`) antes de crear otros nuevos.
+4. **Reutiliza los componentes base** (`Button`, `Field`, `Modal`, `Avatar`, `Badge`, `Switch`, `Checkbox`, `Dropdown`, `Highlight`) antes de crear otros nuevos.
 5. **TypeScript estricto.** Antes de abrir un PR, `npm run build` y `npm run lint` deben pasar sin errores.
 
 ## Flujo de trabajo con Git
