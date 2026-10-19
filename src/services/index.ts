@@ -10,7 +10,7 @@
  * Úsalos en componentes con el hook `useService` (src/hooks/useService.ts).
  */
 import * as db from '../mocks/data'
-import type { Canal, Grabacion, Mensaje, Miembro, ResumenInicio, Servidor, SesionVoz, Usuario } from '../types'
+import type { Canal, Grabacion, Invitacion, Mensaje, Miembro, ResumenInicio, ResumenServidor, Servidor, SesionVoz, Usuario } from '../types'
 
 const LATENCIA_MS = 250
 
@@ -36,6 +36,17 @@ export const serverService = {
   find: (id: string): Servidor | undefined => db.servidores.find((s) => s.servidorId === id),
   list: (): Servidor[] => db.servidores,
   defaultId: (uid: string = db.CURRENT_UID): string => db.miembros.find((m) => m.uid === uid)?.servidorId ?? '',
+  /** Canales, personas en llamada y última actividad de un servidor. */
+  summary: (id: string): ResumenServidor => db.resumenServidores[id] ?? { canales: 0, enLlamada: 0 },
+}
+
+/* ---------- Invitaciones ---------- */
+export const inviteService = {
+  /** Acepta el enlace completo (talkwith.app/i/codigo) o solo el código. */
+  validate: (texto: string): Promise<Invitacion | null> => {
+    const codigo = texto.trim().split('/').pop()?.toLowerCase() ?? ''
+    return simular(db.invitaciones.find((i) => i.codigo.toLowerCase() === codigo) ?? null)
+  },
 }
 
 /* ---------- Miembros y roles ---------- */
@@ -57,6 +68,8 @@ export const channelService = {
   mentions: (canalId: string, uid: string = db.CURRENT_UID): number =>
     db.mensajes.filter((m) => m.canalId === canalId && m.menciones?.includes(uid)).length,
   readIds: (): string[] => db.canalesLeidos,
+  /** Personas escribiendo ahora mismo en un canal de texto. */
+  typing: (canalId: string): string[] => db.escribiendo[canalId] ?? [],
 }
 
 /* ---------- Mensajes ---------- */
@@ -71,6 +84,8 @@ export const sessionService = {
   getSegments: (sesionId: string) => simular(db.segmentos.filter((g) => g.sesionId === sesionId)),
   getConsents: (sesionId: string) => simular(db.consentimientos.filter((c) => c.sesionId === sesionId)),
   speakingTime: (sesionId: string): Record<string, string> => db.tiempoHablado[sesionId] ?? {},
+  /** Total de sesiones del servidor (para la paginación del historial). */
+  total: (servidorId: string): number => db.totalSesiones[servidorId] ?? db.sesiones.filter((s) => s.servidorId === servidorId).length,
 }
 
 /* ---------- Grabaciones ---------- */

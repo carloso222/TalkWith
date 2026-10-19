@@ -79,6 +79,8 @@ La entrega usa términos de Angular. En React se cubren así:
 
 Usa siempre los helpers de `src/lib/routes.ts` (`rutas.canal(serverId, canalId)`, etc.) en lugar de escribir las rutas a mano.
 
+**Para la demo de las pantallas 08 y 11:** en *Unirse* pega `talkwith.app/i/club-lectura-7KD2` (invitación válida); en un canal de texto, el menú **⋯** tiene «Simular pérdida de conexión».
+
 **Modo demo:** el botón del matraz, abajo en la barra de servidores, permite simular el rol *miembro* para mostrar que `RoleGuard` bloquea la configuración y lanzar ejemplos de notificaciones.
 
 ## Reparto de pantallas
@@ -89,7 +91,7 @@ Cada página que todavía no está hecha muestra un aviso **"Por construir"** co
 |---|---|---|
 | **Carlos** | ✅ 02–03 Login, ✅ 04 Registro, ✅ 18–20 Detalle de sesión, ✅ 22–23 Búsqueda, ✅ 28 Perfil y ✅ base del proyecto, rutas y guardias | `pages/auth/*`, `pages/history/DetalleSesion.tsx`, `pages/search/*`, `pages/account/*` |
 | **Diego** | 01 Landing, 05 Inicio, 12–16 Canal de voz y grabación, 21 Grabaciones, 29 404 (base ✅) + kit de componentes y layout | `pages/public/*`, `pages/dashboard/*`, `pages/voice/*`, `pages/history/Grabaciones.tsx`, `components/ui/*`, `components/layout/*` |
-| **Isaian** | 06 Tus servidores, 07–09 Crear servidor y toasts, 08 Unirse, 10–11 Canal de texto, 17 Historial, 24–27 Configuración | `pages/servers/*`, `pages/channels/CanalTexto.tsx`, `pages/history/Sesiones.tsx`, `pages/settings/*` |
+| **Isaian** | ✅ 06 Tus servidores, ✅ 07–09 Crear servidor y toasts, ✅ 08 Unirse, ✅ 10–11 Canal de texto, ✅ 17 Historial, ✅ 24–27 Configuración | `pages/servers/*`, `pages/channels/CanalTexto.tsx` y `ColumnaMiembros.tsx`, `pages/history/Sesiones.tsx`, `pages/settings/*` |
 
 ## Reglas del equipo
 

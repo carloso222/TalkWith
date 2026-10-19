@@ -7,9 +7,10 @@ import TopBar from './TopBar'
 
 const titulos: [RegExp, string][] = [
   [/^\/app\/?$/, 'Inicio'],
-  [/^\/app\/servidores\/nuevo/, 'Crear servidor'],
+  // Crear y unirse se abren como modal encima del Inicio (Figma 07 y 08).
+  [/^\/app\/servidores\/nuevo/, 'Inicio'],
   [/^\/app\/servidores/, 'Tus servidores'],
-  [/^\/app\/unirse/, 'Unirse con invitación'],
+  [/^\/app\/unirse/, 'Inicio'],
   [/^\/app\/buscar/, 'Búsqueda'],
   [/^\/app\/perfil/, 'Tu perfil'],
   [/\/sesiones\/[^/]+/, 'Sesión'],
