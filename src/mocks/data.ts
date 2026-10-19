@@ -8,9 +8,11 @@ import type {
   Canal,
   Consentimiento,
   Grabacion,
+  Invitacion,
   Mensaje,
   Miembro,
   ResultadoBusqueda,
+  ResumenServidor,
   SesionVoz,
   Segmento,
   Servidor,
@@ -77,6 +79,9 @@ export const silenciados: string[] = ['u-diego']
 
 /** Sesión en curso (con subtítulos en vivo) de cada canal de voz. */
 export const sesionEnVivo: Record<string, string> = { 'sala-principal': 's1' }
+
+/** Quién está escribiendo en cada canal de texto (indicador «escribiendo…»). */
+export const escribiendo: Record<string, string[]> = { general: ['u-isaian'] }
 
 /** Canales de texto cuyas menciones ya estaban leídas al iniciar. */
 export const canalesLeidos: string[] = ['general']
@@ -152,3 +157,19 @@ export const resultadosBusqueda: ResultadoBusqueda[] = [
   { resultadoId: 'b6', tipo: 'mensaje', servidorNombre: 'Estudio de Diseño', ubicacion: '#recursos', autorUid: 'u-valeria', fragmento: 'Subí la rúbrica final del portafolio en PDF, revisen la sección de casos de estudio.', cuando: 'Ayer, 16:05', ruta: '/app/s/estudio-diseno/c/recursos' },
   { resultadoId: 'b7', tipo: 'mensaje', servidorNombre: 'Estudio de Diseño', ubicacion: '#general', autorUid: 'u-mateo', fragmento: 'Les dejo esta referencia para la crítica de hoy: diez heurísticas de usabilidad.', cuando: 'Hoy, 11:20', ruta: '/app/s/estudio-diseno/c/general' },
 ]
+
+/** Resumen de cada servidor para las tarjetas de «Tus servidores» (Figma 06). */
+export const resumenServidores: Record<string, ResumenServidor> = {
+  'estudio-diseno': { canales: 7, enLlamada: 3 },
+  'club-lectura': { canales: 5, enLlamada: 0, actividad: 'Activo hace 2 h' },
+  'dev-latam': { canales: 14, enLlamada: 12 },
+  'foto-musica': { canales: 6, enLlamada: 0, actividad: 'Activo ayer' },
+}
+
+/** Invitaciones válidas (Figma 08). Prueba con talkwith.app/i/club-lectura-7KD2 */
+export const invitaciones: Invitacion[] = [
+  { codigo: 'club-lectura-7KD2', servidorId: 'club-lectura', invitaUid: 'u-sofia', expiraEn: '6 días', enLinea: 6, enLlamada: 2 },
+]
+
+/** Total de sesiones registradas por servidor (el historial muestra solo la primera página). */
+export const totalSesiones: Record<string, number> = { 'estudio-diseno': 28 }

@@ -151,3 +151,20 @@ export interface ResumenInicio {
   /** Servidor por defecto del usuario (el primero al que pertenece). */
   servidorId: string
 }
+/** Datos de la tarjeta de cada servidor en «Tus servidores». */
+export interface ResumenServidor {
+  canales: number
+  enLlamada: number
+  /** Última actividad cuando nadie está en llamada, p. ej. "Activo hace 2 h". */
+  actividad?: string
+}
+
+/** Invitación a un servidor (enlace talkwith.app/i/<codigo>). */
+export interface Invitacion {
+  codigo: string
+  servidorId: string
+  invitaUid: string
+  expiraEn: string
+  enLinea: number
+  enLlamada: number
+}

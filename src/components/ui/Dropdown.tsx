@@ -15,14 +15,33 @@ interface Props<T extends string> {
   valor: T | null
   opciones: Opcion<T>[]
   onChange: (v: T | null) => void
+  /**
+   * chip: píldora pequeña (filtros de Búsqueda).
+   * campo: botón de 40 px como los filtros del Historial ("Canal: Todos").
+   */
+  variante?: 'chip' | 'campo'
+  /** Solo en "campo": texto de la opción vacía. Si no se pasa, no se puede dejar sin valor. */
+  textoTodos?: string
 }
 
-/** Chip de filtro con menú desplegable (usa la "directiva" useClickOutside). */
-export default function Dropdown<T extends string>({ etiqueta, icono, valor, opciones, onChange }: Props<T>) {
+/** Filtro con menú desplegable (usa la "directiva" useClickOutside). */
+export default function Dropdown<T extends string>({ etiqueta, icono, valor, opciones, onChange, variante = 'chip', textoTodos }: Props<T>) {
   const [abierto, setAbierto] = useState(false)
   const cerrar = useCallback(() => setAbierto(false), [])
   const ref = useClickOutside<HTMLDivElement>(cerrar, abierto)
   const elegida = opciones.find((o) => o.valor === valor)
+  const campo = variante === 'campo'
+
+  const vacia = campo ? textoTodos : 'Cualquiera'
+  const lista: { valor: T | null; label: string }[] = vacia ? [{ valor: null, label: vacia }, ...opciones] : opciones
+
+  let texto: string
+  if (campo) {
+    const actual = elegida?.label ?? textoTodos ?? ''
+    texto = etiqueta ? `${etiqueta}: ${actual}` : actual
+  } else {
+    texto = elegida ? `${etiqueta}: ${elegida.label}` : etiqueta
+  }
 
   return (
     <div ref={ref} className="relative">
@@ -31,17 +50,19 @@ export default function Dropdown<T extends string>({ etiqueta, icono, valor, opc
         onClick={() => setAbierto((v) => !v)}
         aria-expanded={abierto}
         className={cn(
-          'inline-flex h-8 items-center gap-1.5 rounded-full border px-3 text-small transition-colors',
-          elegida ? 'border-primary/50 bg-primary/10 text-fg' : 'border-line text-muted hover:text-fg',
+          'inline-flex items-center gap-1.5 border transition-colors',
+          campo
+            ? 'h-10 rounded-[10px] border-line bg-panel px-3 text-small text-fg hover:border-muted/50 [&>svg:first-child]:text-muted'
+            : cn('h-8 rounded-full px-3 text-small', elegida ? 'border-primary/50 bg-primary/10 text-fg' : 'border-line text-muted hover:text-fg'),
         )}
       >
         {icono}
-        {elegida ? `${etiqueta}: ${elegida.label}` : etiqueta}
-        <ChevronDown className={cn('size-3.5 transition-transform', abierto && 'rotate-180')} />
+        {texto}
+        <ChevronDown className={cn('transition-transform', campo ? 'size-4 text-muted' : 'size-3.5', abierto && 'rotate-180')} />
       </button>
       {abierto && (
-        <div role="listbox" className="animate-dialog-in absolute top-10 left-0 z-30 min-w-52 rounded-xl border border-line bg-panel p-1.5 shadow-high">
-          {[{ valor: null, label: 'Cualquiera' } as { valor: T | null; label: string }, ...opciones].map((o) => (
+        <div role="listbox" className={cn('animate-dialog-in absolute left-0 z-30 min-w-52 rounded-xl border border-line bg-panel p-1.5 shadow-high', campo ? 'top-12' : 'top-10')}>
+          {lista.map((o) => (
             <button
               key={o.label}
               role="option"
