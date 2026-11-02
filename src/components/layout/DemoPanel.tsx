@@ -5,6 +5,7 @@ import { useClickOutside } from '../../hooks/useClickOutside'
 import { rutas } from '../../lib/routes'
 import { useAuthStore } from '../../store/authStore'
 import { useUiStore } from '../../store/uiStore'
+import { useVoiceStore } from '../../store/voiceStore'
 import type { Rol } from '../../types'
 
 const roles: { valor: Rol | null; label: string }[] = [
@@ -12,6 +13,11 @@ const roles: { valor: Rol | null; label: string }[] = [
   { valor: 'propietario', label: 'Propietario' },
   { valor: 'admin', label: 'Administrador' },
   { valor: 'miembro', label: 'Miembro' },
+]
+
+const subtitulos = [
+  { bloqueados: false, label: 'Disponibles' },
+  { bloqueados: true, label: 'No disponibles' },
 ]
 
 /**
@@ -23,6 +29,7 @@ export default function DemoPanel() {
   const ref = useClickOutside<HTMLDivElement>(() => setAbierto(false), abierto)
   const { rolDemo, setRolDemo, logout } = useAuthStore()
   const notify = useUiStore((s) => s.notify)
+  const { subtitlesBlocked, setSubtitlesBlocked } = useVoiceStore()
   const navigate = useNavigate()
 
   return (
@@ -44,6 +51,16 @@ export default function DemoPanel() {
             </div>
           </div>
           <div className="flex flex-col gap-1.5">
+            <p className="text-caption text-muted">Subtítulos en la sala de voz</p>
+            <div className="grid grid-cols-2 gap-1.5">
+              {subtitulos.map((o) => (
+                <button key={o.label} onClick={() => setSubtitlesBlocked(o.bloqueados)} aria-pressed={subtitlesBlocked === o.bloqueados} className={`rounded-lg px-2 py-1.5 text-caption ${subtitlesBlocked === o.bloqueados ? 'bg-primary text-white' : 'bg-raised text-fg hover:bg-raised/70'}`}>
+                  {o.label}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="flex flex-col gap-1.5">
             <p className="text-caption text-muted">Ejemplos de notificación</p>
             <div className="flex gap-1.5">
               <button onClick={() => notify('exito', 'Servidor creado correctamente', 'Club de Diseño UX ya está listo.')} className="flex-1 rounded-lg bg-online/15 py-1.5 text-caption text-online">Éxito</button>
@@ -56,7 +73,7 @@ export default function DemoPanel() {
       )}
       <button onClick={() => setAbierto((v) => !v)} title="Modo demo" className="relative flex size-12 items-center justify-center rounded-full border border-dashed border-line text-muted hover:border-muted hover:text-fg" aria-expanded={abierto} aria-label="Modo demo">
         <FlaskConical className="size-5" />
-        {rolDemo && <span className="absolute top-0 right-0 size-3 rounded-full bg-warning ring-2 ring-base" />}
+        {(rolDemo || subtitlesBlocked) && <span className="absolute top-0 right-0 size-3 rounded-full bg-warning ring-2 ring-base" />}
       </button>
     </div>
   )
