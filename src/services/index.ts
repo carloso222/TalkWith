@@ -9,7 +9,7 @@
  *
  * Úsalos en componentes con el hook `useService` (src/hooks/useService.ts).
  */
-import { validarCanal, type DatosCanal } from '../lib/validaciones'
+import { validarCanal, validarServidor, type DatosCanal, type DatosServidor } from '../lib/validaciones'
 import * as db from '../mocks/data'
 import type { Canal, Grabacion, Invitacion, Mensaje, Miembro, ResumenInicio, ResumenServidor, Servidor, SesionVoz, Usuario } from '../types'
 import { ApiError } from './errores'
@@ -53,52 +53,199 @@ export const userService = {
   find: (uid: string): Usuario | undefined => db.usuarios.find((u) => u.uid === uid),
 }
 
+/* ---------- Guardado local ---------- */
+
+// lee una lista de localStorage, si no hay usa los datos de ejemplo
+function cargarLista<T>(clave: string, inicial: T[]): T[] {
+  const guardada = localStorage.getItem(clave)
+  if (guardada) return JSON.parse(guardada)
+  return [...inicial]
+}
+
+function guardarLista<T>(clave: string, lista: T[]) {
+  localStorage.setItem(clave, JSON.stringify(lista))
+}
+
 /* ---------- Servidores ---------- */
+
+const CLAVE_SERVIDORES = 'talkwith-servidores'
+const CLAVE_MIEMBROS = 'talkwith-miembros'
+const CLAVE_INVITACIONES = 'talkwith-invitaciones'
+
+let listaServidores = cargarLista(CLAVE_SERVIDORES, db.servidores)
+let listaMiembros = cargarLista(CLAVE_MIEMBROS, db.miembros)
+let listaInvitaciones = cargarLista(CLAVE_INVITACIONES, db.invitaciones)
+
+const COLORES_SERVIDOR = ['#6366f1', '#ec4899', '#16a34a', '#d97706', '#0ea5e9', '#8b5cf6', '#ef4444']
+
+// "Club de Diseño UX" -> "CD"
+function crearIniciales(nombre: string) {
+  const palabras = nombre.trim().split(/\s+/)
+  const letras = palabras.length > 1 ? palabras[0][0] + palabras[1][0] : palabras[0].slice(0, 2)
+  return letras.toUpperCase()
+}
+
+// "Club de Diseño UX" -> "club-diseno-ux"
+function crearSlug(texto: string) {
+  return texto
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .toLowerCase()
+    .replace(/\b(de|del|la|el|y)\b/g, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-|-$/g, '')
+}
+
+// codigo tipo "club-diseno-ux-9QF1"
+function crearCodigo(nombre: string) {
+  const letras = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
+  let sufijo = ''
+  for (let i = 0; i < 4; i++) sufijo += letras[Math.floor(Math.random() * letras.length)]
+  return `${crearSlug(nombre) || 'servidor'}-${sufijo}`
+}
+
+// revisa los datos igual que lo haria el backend
+function revisarServidor(datos: DatosServidor, uid: string) {
+  const errores = validarServidor(datos)
+  if (errores.nombre) throw new ApiError(400, errores.nombre, 'nombre')
+  if (errores.descripcion) throw new ApiError(400, errores.descripcion, 'descripcion')
+
+  const misIds = listaMiembros.filter((m) => m.uid === uid).map((m) => m.servidorId)
+  const nombre = datos.nombre.trim().toLowerCase()
+  const repetido = listaServidores.some((s) => misIds.includes(s.servidorId) && s.nombre.toLowerCase() === nombre)
+  if (repetido) throw new ApiError(409, 'Ya perteneces a un servidor con ese nombre.', 'nombre')
+}
+
+/** Enlace completo para compartir una invitacion. */
+export const enlaceInvitacion = (codigo: string) => `talkwith.app/i/${codigo}`
+
 export const serverService = {
-  getMine: (uid: string = db.CURRENT_UID): Promise<Servidor[]> => {
-    const ids = db.miembros.filter((m) => m.uid === uid).map((m) => m.servidorId)
-    return simular(db.servidores.filter((s) => ids.includes(s.servidorId)))
-  },
-  getById: (id: string) => simular(db.servidores.find((s) => s.servidorId === id) ?? null),
-  find: (id: string): Servidor | undefined => db.servidores.find((s) => s.servidorId === id),
-  list: (): Servidor[] => db.servidores,
-  defaultId: (uid: string = db.CURRENT_UID): string => db.miembros.find((m) => m.uid === uid)?.servidorId ?? '',
+  getMine: (uid: string = db.CURRENT_UID): Promise<Servidor[]> =>
+    responder(() => {
+      const ids = listaMiembros.filter((m) => m.uid === uid).map((m) => m.servidorId)
+      return listaServidores.filter((s) => ids.includes(s.servidorId))
+    }),
+  getById: (id: string) => simular(listaServidores.find((s) => s.servidorId === id) ?? null),
+  find: (id: string): Servidor | undefined => listaServidores.find((s) => s.servidorId === id),
+  list: (): Servidor[] => listaServidores,
+  defaultId: (uid: string = db.CURRENT_UID): string => listaMiembros.find((m) => m.uid === uid)?.servidorId ?? '',
   /** Canales, personas en llamada y última actividad de un servidor. */
-  summary: (id: string): ResumenServidor => db.resumenServidores[id] ?? { canales: 0, enLlamada: 0 },
+  summary: (id: string): ResumenServidor => {
+    const resumen = db.resumenServidores[id]
+    return {
+      canales: listaCanales.filter((c) => c.servidorId === id).length,
+      enLlamada: resumen?.enLlamada ?? 0,
+      actividad: resumen?.actividad ?? 'Sin actividad todavía',
+    }
+  },
+  /** Crea el servidor con sus canales iniciales, la membresia del dueño y una invitacion. */
+  create: (datos: DatosServidor, uid: string = db.CURRENT_UID): Promise<{ servidor: Servidor; invitacion: Invitacion }> =>
+    responder(() => {
+      revisarServidor(datos, uid)
+      const nombre = datos.nombre.trim()
+      const servidorId = `${crearSlug(nombre) || 'servidor'}-${Date.now().toString(36)}`
+
+      const servidor: Servidor = {
+        servidorId,
+        nombre,
+        descripcion: datos.descripcion.trim(),
+        iniciales: crearIniciales(nombre),
+        color: COLORES_SERVIDOR[listaServidores.length % COLORES_SERVIDOR.length],
+        propietarioUid: uid,
+        privacidad: datos.privacidad,
+        totalMiembros: 1,
+      }
+      const miembro: Miembro = {
+        miembroId: `m-${Date.now().toString(36)}`,
+        servidorId,
+        uid,
+        rol: 'propietario',
+        unidoEn: new Date().toISOString().slice(0, 10),
+      }
+      const invitacion: Invitacion = {
+        codigo: crearCodigo(nombre),
+        servidorId,
+        invitaUid: uid,
+        expiraEn: '7 días',
+        enLinea: 1,
+        enLlamada: 0,
+      }
+      const canalesIniciales: Canal[] = [
+        { canalId: `${servidorId}-general`, servidorId, nombre: 'general', tipo: 'texto', descripcion: 'Conversación general del servidor' },
+        { canalId: `${servidorId}-voz`, servidorId, nombre: 'Sala de voz', tipo: 'voz' },
+      ]
+
+      listaServidores = [...listaServidores, servidor]
+      listaMiembros = [...listaMiembros, miembro]
+      listaInvitaciones = [...listaInvitaciones, invitacion]
+      listaCanales = [...listaCanales, ...canalesIniciales]
+      guardarLista(CLAVE_SERVIDORES, listaServidores)
+      guardarLista(CLAVE_MIEMBROS, listaMiembros)
+      guardarLista(CLAVE_INVITACIONES, listaInvitaciones)
+      guardarCanales()
+
+      return { servidor, invitacion }
+    }),
 }
 
 /* ---------- Invitaciones ---------- */
+
+// acepta el enlace completo (talkwith.app/i/codigo) o solo el codigo
+const leerCodigo = (texto: string) => texto.trim().split('/').pop()?.toLowerCase() ?? ''
+
 export const inviteService = {
-  /** Acepta el enlace completo (talkwith.app/i/codigo) o solo el código. */
   validate: (texto: string): Promise<Invitacion | null> => {
-    const codigo = texto.trim().split('/').pop()?.toLowerCase() ?? ''
-    return simular(db.invitaciones.find((i) => i.codigo.toLowerCase() === codigo) ?? null)
+    const codigo = leerCodigo(texto)
+    return simular(listaInvitaciones.find((i) => i.codigo.toLowerCase() === codigo) ?? null)
   },
+  /** Invitacion vigente de un servidor, para volver a compartirla. */
+  getByServer: (servidorId: string): Promise<Invitacion | null> =>
+    simular(listaInvitaciones.find((i) => i.servidorId === servidorId) ?? null),
+  /** Agrega al usuario como miembro del servidor de la invitacion. */
+  join: (texto: string, uid: string = db.CURRENT_UID): Promise<Servidor> =>
+    responder(() => {
+      const codigo = leerCodigo(texto)
+      const invitacion = listaInvitaciones.find((i) => i.codigo.toLowerCase() === codigo)
+      const servidor = invitacion && listaServidores.find((s) => s.servidorId === invitacion.servidorId)
+      if (!invitacion || !servidor) throw new ApiError(404, 'El enlace no es válido o ya expiró. Pide uno nuevo a quien te invitó.')
+
+      const yaEsMiembro = listaMiembros.some((m) => m.servidorId === servidor.servidorId && m.uid === uid)
+      if (yaEsMiembro) throw new ApiError(409, `Ya eres miembro de ${servidor.nombre}.`)
+
+      const miembro: Miembro = {
+        miembroId: `m-${Date.now().toString(36)}`,
+        servidorId: servidor.servidorId,
+        uid,
+        rol: 'miembro',
+        unidoEn: new Date().toISOString().slice(0, 10),
+      }
+      const actualizado = { ...servidor, totalMiembros: servidor.totalMiembros + 1 }
+      listaMiembros = [...listaMiembros, miembro]
+      listaServidores = listaServidores.map((s) => (s.servidorId === servidor.servidorId ? actualizado : s))
+      guardarLista(CLAVE_MIEMBROS, listaMiembros)
+      guardarLista(CLAVE_SERVIDORES, listaServidores)
+      return actualizado
+    }),
 }
 
 /* ---------- Miembros y roles ---------- */
 export const memberService = {
-  getByServer: (servidorId: string): Promise<Miembro[]> => simular(db.miembros.filter((m) => m.servidorId === servidorId)),
+  getByServer: (servidorId: string): Promise<Miembro[]> => simular(listaMiembros.filter((m) => m.servidorId === servidorId)),
   /** Rol del usuario actual en un servidor, o null si no es miembro. */
   roleOf: (servidorId: string, uid: string = db.CURRENT_UID) =>
-    db.miembros.find((m) => m.servidorId === servidorId && m.uid === uid)?.rol ?? null,
+    listaMiembros.find((m) => m.servidorId === servidorId && m.uid === uid)?.rol ?? null,
+  isMember: (servidorId: string, uid: string = db.CURRENT_UID) => listaMiembros.some((m) => m.servidorId === servidorId && m.uid === uid),
 }
 
 /* ---------- Canales ---------- */
 
 // los canales se guardan en localStorage para que el crud se conserve al recargar
-const CLAVE_CANALES = 'talkwith-canales'
+const CLAVE_CANALES = 'talkwith-canales-v2'
 
-function cargarCanales(): Canal[] {
-  const guardados = localStorage.getItem(CLAVE_CANALES)
-  if (guardados) return JSON.parse(guardados)
-  return [...db.canales]
-}
-
-let listaCanales = cargarCanales()
+let listaCanales = cargarLista(CLAVE_CANALES, db.canales)
 
 function guardarCanales() {
-  localStorage.setItem(CLAVE_CANALES, JSON.stringify(listaCanales))
+  guardarLista(CLAVE_CANALES, listaCanales)
 }
 
 // simula la respuesta del servidor, si la accion lanza error la promesa falla

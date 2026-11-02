@@ -37,6 +37,8 @@ export const servidores: Servidor[] = [
   { servidorId: 'club-lectura', nombre: 'Club de Lectura', descripcion: 'Un libro al mes y charlas de voz los viernes por la noche.', iniciales: 'CL', color: '#ec4899', propietarioUid: 'u-sofia', privacidad: 'enlace', totalMiembros: 24 },
   { servidorId: 'dev-latam', nombre: 'Dev Latam', descripcion: 'Comunidad de desarrollo en español: dudas, empleos y pair programming.', iniciales: 'DL', color: '#16a34a', propietarioUid: 'u-diego', privacidad: 'enlace', totalMiembros: 312 },
   { servidorId: 'foto-musica', nombre: 'Foto y Música', descripcion: 'Comparte fotos, playlists y sesiones de escucha en grupo.', iniciales: 'FM', color: '#d97706', propietarioUid: 'u-mateo', privacidad: 'invitacion', totalMiembros: 46 },
+  // servidor del que aun no eres miembro, sirve para probar unirse con invitacion
+  { servidorId: 'arte-digital', nombre: 'Arte Digital', descripcion: 'Ilustración, animación y retos semanales de dibujo.', iniciales: 'AD', color: '#0ea5e9', propietarioUid: 'u-sofia', privacidad: 'enlace', totalMiembros: 9 },
 ]
 
 export const miembros: Miembro[] = [
@@ -51,6 +53,7 @@ export const miembros: Miembro[] = [
   { miembroId: 'm9', servidorId: 'club-lectura', uid: 'u-carlos', rol: 'miembro', unidoEn: '2026-09-12' },
   { miembroId: 'm10', servidorId: 'dev-latam', uid: 'u-carlos', rol: 'admin', unidoEn: '2026-08-20' },
   { miembroId: 'm11', servidorId: 'foto-musica', uid: 'u-carlos', rol: 'miembro', unidoEn: '2026-09-15' },
+  { miembroId: 'm12', servidorId: 'arte-digital', uid: 'u-sofia', rol: 'propietario', unidoEn: '2026-10-01' },
 ]
 
 export const canales: Canal[] = [
@@ -67,6 +70,8 @@ export const canales: Canal[] = [
   { canalId: 'dev-pair', servidorId: 'dev-latam', nombre: 'Pair programming', tipo: 'voz' },
   { canalId: 'foto-general', servidorId: 'foto-musica', nombre: 'general', tipo: 'texto', descripcion: 'Fotos y playlists' },
   { canalId: 'foto-escucha', servidorId: 'foto-musica', nombre: 'Sala de escucha', tipo: 'voz' },
+  { canalId: 'arte-general', servidorId: 'arte-digital', nombre: 'general', tipo: 'texto', descripcion: 'Comparte tus avances' },
+  { canalId: 'arte-estudio', servidorId: 'arte-digital', nombre: 'Estudio abierto', tipo: 'voz' },
 ]
 
 /** Quién está conectado en cada canal de voz (presencia simulada). */
@@ -169,6 +174,7 @@ export const resumenServidores: Record<string, ResumenServidor> = {
 /** Invitaciones válidas (Figma 08). Prueba con talkwith.app/i/club-lectura-7KD2 */
 export const invitaciones: Invitacion[] = [
   { codigo: 'club-lectura-7KD2', servidorId: 'club-lectura', invitaUid: 'u-sofia', expiraEn: '6 días', enLinea: 6, enLlamada: 2 },
+  { codigo: 'arte-digital-5MZ8', servidorId: 'arte-digital', invitaUid: 'u-sofia', expiraEn: '7 días', enLinea: 3, enLlamada: 0 },
 ]
 
 /** Total de sesiones registradas por servidor (el historial muestra solo la primera página). */

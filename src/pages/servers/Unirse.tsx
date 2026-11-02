@@ -7,12 +7,12 @@ import ServerIcon from '../../components/ui/ServerIcon'
 import { useDebounce } from '../../hooks/useDebounce'
 import { useService } from '../../hooks/useService'
 import { rutas } from '../../lib/routes'
-import { channelService, inviteService, serverService, userService } from '../../services'
+import { channelService, inviteService, memberService, mensajeDeError, serverService, userService } from '../../services'
 import { useUiStore } from '../../store/uiStore'
 import ModalServidor from './ModalServidor'
 import { useCerrarModal } from './useCerrarModal'
 
-/** Figma 08 · Unirse con invitación. Responsable: Isaian. Prueba con talkwith.app/i/club-lectura-7KD2 */
+/** Figma 08 · Unirse con invitación. Responsable: Isaian. Prueba con talkwith.app/i/arte-digital-5MZ8 */
 export default function Unirse() {
   const navigate = useNavigate()
   const cerrar = useCerrarModal()
@@ -26,13 +26,36 @@ export default function Unirse() {
   const servidor = invitacion ? serverService.find(invitacion.servidorId) : undefined
   const valida = listo && Boolean(servidor)
   const invalida = listo && consulta !== '' && !servidor
+  const yaEsMiembro = servidor ? memberService.isMember(servidor.servidorId) : false
 
-  const unirse = (e?: FormEvent) => {
+  const [enviando, setEnviando] = useState(false)
+  const [errorEnvio, setErrorEnvio] = useState('')
+
+  const irAlServidor = (servidorId: string) => {
+    const primerCanal = channelService.listByServer(servidorId)[0]?.canalId ?? 'general'
+    navigate(rutas.canal(servidorId, primerCanal))
+  }
+
+  const unirse = async (e?: FormEvent) => {
     e?.preventDefault()
     if (!valida || !servidor) return
-    notify('exito', `Te uniste a ${servidor.nombre}`, 'Es solo una demostración: tu membresía no se guardó.')
-    const primerCanal = channelService.listByServer(servidor.servidorId)[0]?.canalId ?? 'general'
-    navigate(rutas.canal(servidor.servidorId, primerCanal))
+
+    // si ya es miembro solo lo llevamos al servidor
+    if (yaEsMiembro) {
+      irAlServidor(servidor.servidorId)
+      return
+    }
+
+    setEnviando(true)
+    setErrorEnvio('')
+    try {
+      const unido = await inviteService.join(enlace)
+      notify('exito', `Te uniste a ${unido.nombre}`, `Ahora son ${unido.totalMiembros} miembros.`)
+      irAlServidor(unido.servidorId)
+    } catch (err) {
+      setErrorEnvio(mensajeDeError(err))
+      setEnviando(false)
+    }
   }
 
   return (
@@ -43,8 +66,10 @@ export default function Unirse() {
       icono={<Link2 className="size-6" />}
       acciones={
         <>
-          <Button variant="secundario" onClick={cerrar}>Cancelar</Button>
-          <Button onClick={() => unirse()} disabled={!valida}>Unirme al servidor</Button>
+          <Button variant="secundario" onClick={cerrar} disabled={enviando}>Cancelar</Button>
+          <Button onClick={() => unirse()} disabled={!valida} loading={enviando}>
+            {enviando ? 'Uniéndote…' : yaEsMiembro ? 'Ir al servidor' : 'Unirme al servidor'}
+          </Button>
         </>
       }
     >
@@ -54,18 +79,23 @@ export default function Unirse() {
           placeholder="talkwith.app/i/club-lectura-7KD2"
           icon={<Link2 className="size-[18px]" />}
           value={enlace}
-          onChange={(e) => setEnlace(e.target.value)}
-          error={invalida ? 'El enlace no es válido o ya expiró. Pide uno nuevo a quien te invitó.' : undefined}
+          onChange={(e) => {
+            setEnlace(e.target.value)
+            setErrorEnvio('')
+          }}
+          error={invalida ? 'El enlace no es válido o ya expiró. Pide uno nuevo a quien te invitó.' : errorEnvio || undefined}
+          disabled={enviando}
           autoFocus
         />
-        {valida && invitacion && (
+        {valida && invitacion && !errorEnvio && (
           <p className="flex items-center gap-1.5 text-caption text-online">
             <Check className="size-3.5" /> Invitación válida · expira en {invitacion.expiraEn}
+            {yaEsMiembro && <span className="text-muted">· ya eres miembro</span>}
           </p>
         )}
         {!enlace && (
           <p className="flex items-center gap-1.5 text-caption text-muted">
-            <AlertCircle className="size-3.5" /> Prueba con talkwith.app/i/club-lectura-7KD2
+            <AlertCircle className="size-3.5" /> Prueba con talkwith.app/i/arte-digital-5MZ8
           </p>
         )}
 

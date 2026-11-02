@@ -1,12 +1,15 @@
 import { Loader2 } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router'
+import AjustesAudio from './AjustesAudio'
+import AvisoMicrofono from './AvisoMicrofono'
 import CallHeader from './CallHeader'
 import ControlBar from './ControlBar'
 import ParticipantTile from './ParticipantTile'
 import RecordingBanner from './RecordingBanner'
 import RecordingDialog from './RecordingDialog'
 import TranscriptPanel from './TranscriptPanel'
+import { useMicrofono } from '../../hooks/useMicrofono'
 import { useRecordingFlow } from '../../hooks/useRecordingFlow'
 import { useService } from '../../hooks/useService'
 import { useSubtitlesAvailable } from '../../hooks/useSubtitlesAvailable'
@@ -47,7 +50,8 @@ export default function VoiceChannel({ canal }: { canal: Canal }) {
   const { data: sesion, loading } = useService<SesionVoz | null>(() => (sesionId ? sessionService.getById(sesionId) : Promise.resolve(null)), [sesionId])
   const { data: todos } = useService<Segmento[]>(() => (sesionId ? sessionService.getSegments(sesionId) : Promise.resolve([])), [sesionId])
 
-  const [yoSilenciado, setYoSilenciado] = useState(false)
+  const mic = useMicrofono()
+  const [ajustesAbiertos, setAjustesAbiertos] = useState(false)
   const [subtitulosActivos, setSubtitulosActivos] = useState(true)
   const [panelAbierto, setPanelAbierto] = useState(true)
   const [visibles, setVisibles] = useState(SEGMENTOS_INICIALES)
@@ -87,7 +91,23 @@ export default function VoiceChannel({ canal }: { canal: Canal }) {
   const subtitulosVisibles = subtitulosActivos && disponibles
 
   const tiempo = formatear((sesion ? aSegundos(sesion.duracion) : 0) + extra)
-  const estaSilenciado = (uid: string) => (uid === yoUid ? yoSilenciado : voiceService.isMuted(uid))
+  const estaSilenciado = (uid: string) => (uid === yoUid ? mic.silenciado : voiceService.isMuted(uid))
+
+  const alternarMicrofono = () => {
+    if (mic.listo) {
+      mic.alternarSilencio()
+      return
+    }
+    if (mic.estado === 'denegado') {
+      notify('error', 'El micrófono está bloqueado', 'Actívalo desde el candado junto a la dirección y pulsa «Reintentar».')
+      return
+    }
+    if (mic.estado === 'no-soportado') {
+      notify('error', 'Micrófono no disponible', 'Tu navegador no permite usar el micrófono en esta página.')
+      return
+    }
+    mic.reintentar()
+  }
 
   const alternarSubtitulos = () => {
     if (!disponibles) {
@@ -144,12 +164,14 @@ export default function VoiceChannel({ canal }: { canal: Canal }) {
           onPanel={() => setPanelAbierto((v) => !v)}
         />
         {grabacion.fase === 'grabando' && <RecordingBanner tiempo={formatear(grabacion.segundos)} />}
+        <AvisoMicrofono estado={mic.estado} onReintentar={mic.reintentar} />
 
         <div className="min-h-0 flex-1 px-6 pt-6 pb-28">
           <div className={cn('grid h-full auto-rows-fr gap-4', participantes.length === 1 ? 'mx-auto max-w-3xl grid-cols-1' : participantes.length > 4 ? 'grid-cols-3' : 'grid-cols-2')}>
             {participantes.map((uid) => {
               const silenciado = estaSilenciado(uid)
-              const hablando = !silenciado && ultimo?.hablanteUid === uid
+              // tu tarjeta usa el nivel real del microfono, las demas la transcripcion
+              const hablando = uid === yoUid ? mic.hablando : !silenciado && ultimo?.hablanteUid === uid
               const seleccionado = subtitulosVisibles && segSeleccionado?.hablanteUid === uid
               let subtitulo: string | undefined
               if (subtitulosVisibles) {
@@ -162,9 +184,9 @@ export default function VoiceChannel({ canal }: { canal: Canal }) {
         </div>
 
         <ControlBar
-          silenciado={yoSilenciado}
-          onMic={() => setYoSilenciado((v) => !v)}
-          onAjustes={() => notify('info', 'Ajustes de audio', 'Elegir micrófono y altavoces estará disponible en la siguiente entrega.')}
+          silenciado={mic.silenciado}
+          onMic={alternarMicrofono}
+          onAjustes={() => setAjustesAbiertos(true)}
           subtitulos={subtitulosVisibles}
           onSubtitulos={alternarSubtitulos}
           onParticipantes={() => notify('info', `${participantes.length} personas en la llamada`)}
@@ -185,6 +207,8 @@ export default function VoiceChannel({ canal }: { canal: Canal }) {
           onRevisarPermisos={revisarPermisos}
         />
       )}
+
+      {ajustesAbiertos && <AjustesAudio mic={mic} onClose={() => setAjustesAbiertos(false)} />}
 
       {mostrarDialogo && (
         <RecordingDialog
