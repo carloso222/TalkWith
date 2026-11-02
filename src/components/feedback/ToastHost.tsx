@@ -1,4 +1,4 @@
-import { AlertCircle, Check, Info, X } from 'lucide-react'
+import { AlertTriangle, Check, Info, X } from 'lucide-react'
 import { cn } from '../../lib/cn'
 import { useUiStore } from '../../store/uiStore'
 import type { TipoToast } from '../../types'
@@ -6,7 +6,7 @@ import type { TipoToast } from '../../types'
 const estilo: Record<TipoToast, { icono: typeof Check; clase: string }> = {
   exito: { icono: Check, clase: 'bg-online/15 text-online' },
   info: { icono: Info, clase: 'bg-primary/15 text-primary' },
-  error: { icono: AlertCircle, clase: 'bg-recording/15 text-recording' },
+  error: { icono: AlertTriangle, clase: 'bg-recording/15 text-recording' },
 }
 
 /** Notificaciones (pantalla 09 del Figma). Se monta una vez en App. */

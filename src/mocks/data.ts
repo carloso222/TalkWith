@@ -8,9 +8,11 @@ import type {
   Canal,
   Consentimiento,
   Grabacion,
+  Invitacion,
   Mensaje,
   Miembro,
   ResultadoBusqueda,
+  ResumenServidor,
   SesionVoz,
   Segmento,
   Servidor,
@@ -59,12 +61,30 @@ export const canales: Canal[] = [
   { canalId: 'sala-principal', servidorId: 'estudio-diseno', nombre: 'Sala principal', tipo: 'voz' },
   { canalId: 'critica-portafolio', servidorId: 'estudio-diseno', nombre: 'Crítica de portafolio', tipo: 'voz' },
   { canalId: 'cabina-silenciosa', servidorId: 'estudio-diseno', nombre: 'Cabina silenciosa', tipo: 'voz' },
+  { canalId: 'lectura-general', servidorId: 'club-lectura', nombre: 'general', tipo: 'texto', descripcion: 'Charla del libro del mes' },
+  { canalId: 'lectura-viernes', servidorId: 'club-lectura', nombre: 'Charla de viernes', tipo: 'voz' },
+  { canalId: 'dev-general', servidorId: 'dev-latam', nombre: 'general', tipo: 'texto', descripcion: 'Dudas y avisos de la comunidad' },
+  { canalId: 'dev-pair', servidorId: 'dev-latam', nombre: 'Pair programming', tipo: 'voz' },
+  { canalId: 'foto-general', servidorId: 'foto-musica', nombre: 'general', tipo: 'texto', descripcion: 'Fotos y playlists' },
+  { canalId: 'foto-escucha', servidorId: 'foto-musica', nombre: 'Sala de escucha', tipo: 'voz' },
 ]
 
 /** Quién está conectado en cada canal de voz (presencia simulada). */
 export const enLlamada: Record<string, string[]> = {
   'sala-principal': ['u-sofia', 'u-mateo', 'u-diego'],
 }
+
+/** Quién está silenciado dentro de una llamada. */
+export const silenciados: string[] = ['u-diego']
+
+/** Sesión en curso (con subtítulos en vivo) de cada canal de voz. */
+export const sesionEnVivo: Record<string, string> = { 'sala-principal': 's1' }
+
+/** Quién está escribiendo en cada canal de texto (indicador «escribiendo…»). */
+export const escribiendo: Record<string, string[]> = { general: ['u-isaian'] }
+
+/** Canales de texto cuyas menciones ya estaban leídas al iniciar. */
+export const canalesLeidos: string[] = ['general']
 
 export const mensajes: Mensaje[] = [
   { mensajeId: 'msg1', canalId: 'general', autorUid: 'u-sofia', creadoEn: '10:42', contenido: 'Subí la nueva versión del flujo de onboarding. ¿Alguien la revisa antes de la crítica?', adjunto: { tipo: 'archivo', titulo: 'onboarding-v3.fig', detalle: 'Archivo de Figma, 4.2 MB' } },
@@ -74,6 +94,7 @@ export const mensajes: Mensaje[] = [
   { mensajeId: 'msg5', canalId: 'general', autorUid: 'u-valeria', creadoEn: '11:58', contenido: 'Yo llevo la rúbrica impresa.' },
   { mensajeId: 'msg6', canalId: 'general', autorUid: 'u-valeria', creadoEn: '11:59', contenido: 'Y reservé Sala principal de 4 a 5 para que nadie se quede fuera.' },
   { mensajeId: 'msg7', canalId: 'general', autorUid: 'u-isaian', creadoEn: '12:10', contenido: '@Carlos ya está la grabación de ayer en el historial, por si quieres revisar los comentarios de Lucía.', menciones: ['u-carlos'] },
+  { mensajeId: 'msg8', canalId: 'entregas', autorUid: 'u-diego', creadoEn: '11:50', contenido: '@Carlos ¿puedes revisar el avance de la entrega 3 antes de las 4?', menciones: ['u-carlos'] },
 ]
 
 export const sesiones: SesionVoz[] = [
@@ -86,11 +107,25 @@ export const sesiones: SesionVoz[] = [
 ]
 
 export const segmentos: Segmento[] = [
-  { segmentoId: 'g1', sesionId: 's1', hablanteUid: 'u-carlos', marcaTiempo: '16:21:04', texto: 'Empecemos con el flujo de permisos, que es lo que más dudas generó en la prueba.' },
+  { segmentoId: 'g1', sesionId: 's1', hablanteUid: 'u-carlos', marcaTiempo: '16:21:04', texto: 'Empecemos con el flujo de permisos, que es lo que más dudas generó en la prueba con usuarios.' },
   { segmentoId: 'g2', sesionId: 's1', hablanteUid: 'u-diego', marcaTiempo: '16:21:40', texto: 'Yo noté que el diálogo del navegador aparece antes de explicar para qué es el micrófono.' },
-  { segmentoId: 'g3', sesionId: 's1', hablanteUid: 'u-mateo', marcaTiempo: '16:22:15', texto: 'De acuerdo, y que diga qué pasa si alguien lo rechaza.' },
+  { segmentoId: 'g3', sesionId: 's1', hablanteUid: 'u-mateo', marcaTiempo: '16:22:15', texto: 'De acuerdo, y que diga qué pasa si alguien lo rechaza. Hoy la pantalla se queda en blanco.' },
   { segmentoId: 'g4', sesionId: 's1', hablanteUid: 'u-sofia', marcaTiempo: '16:22:48', texto: 'Creo que el flujo de permisos debería explicar por qué pedimos el micrófono antes de mostrar el diálogo del navegador.' },
+  { segmentoId: 'g5', sesionId: 's1', hablanteUid: 'u-carlos', marcaTiempo: '16:24:02', texto: 'Propongo una pantalla previa con una ilustración y un botón de «Activar micrófono».' },
+  { segmentoId: 'g6', sesionId: 's1', hablanteUid: 'u-diego', marcaTiempo: '16:25:31', texto: 'Podríamos mostrar un ejemplo de subtítulo para que se entienda el beneficio antes de pedir permisos.' },
+  { segmentoId: 'g7', sesionId: 's1', hablanteUid: 'u-sofia', marcaTiempo: '16:27:10', texto: 'Me gusta. Y si lo rechazan, un aviso con los pasos para activarlo desde la barra de direcciones.' },
+  { segmentoId: 'g8', sesionId: 's1', hablanteUid: 'u-mateo', marcaTiempo: '16:29:46', texto: 'Yo armo el prototipo para la crítica del viernes y lo subo a #entregas.' },
+  { segmentoId: 'g9', sesionId: 's2', hablanteUid: 'u-lucia', marcaTiempo: '18:31:12', texto: 'Bienvenidos a la crítica de la semana seis. Empezamos con el portafolio de Mateo.' },
+  { segmentoId: 'g10', sesionId: 's2', hablanteUid: 'u-mateo', marcaTiempo: '18:32:40', texto: 'Reorganicé los casos de estudio para que el proceso se lea antes que el resultado.' },
+  { segmentoId: 'g11', sesionId: 's2', hablanteUid: 'u-valeria', marcaTiempo: '18:35:05', texto: 'La portada funciona, pero el segundo caso no explica qué problema resolvía.' },
+  { segmentoId: 'g12', sesionId: 's2', hablanteUid: 'u-lucia', marcaTiempo: '18:38:22', texto: 'Coincido. Agrega una frase de contexto y una métrica antes de las pantallas.' },
 ]
+
+/** Minutos que habló cada persona por sesión (panel «Participantes» del detalle). */
+export const tiempoHablado: Record<string, Record<string, string>> = {
+  s1: { 'u-carlos': '7 min', 'u-sofia': '8 min', 'u-diego': '5 min', 'u-mateo': '4 min' },
+  s2: { 'u-lucia': '22 min', 'u-mateo': '19 min', 'u-valeria': '14 min', 'u-sofia': '9 min', 'u-diego': '8 min' },
+}
 
 export const grabaciones: Grabacion[] = [
   { grabacionId: 'r1', sesionId: 's1', servidorId: 'estudio-diseno', titulo: 'Revisión del flujo de permisos', canalNombre: 'Sala principal', fecha: 'Hoy, 16:20', duracion: '24:18', creadorUid: 'u-carlos', tamano: '23.1 MB', aceptaron: 4, participantes: 4 },
@@ -118,4 +153,23 @@ export const resultadosBusqueda: ResultadoBusqueda[] = [
   { resultadoId: 'b2', tipo: 'transcripcion', servidorNombre: 'Estudio de Diseño', ubicacion: 'Sala principal', autorUid: 'u-sofia', fragmento: 'Creo que el flujo de permisos debería explicar por qué pedimos el micrófono.', cuando: 'Hoy, 16:22', ruta: '/app/s/estudio-diseno/sesiones/s1' },
   { resultadoId: 'b3', tipo: 'transcripcion', servidorNombre: 'Estudio de Diseño', ubicacion: 'Sala principal', autorUid: 'u-carlos', fragmento: 'Empecemos con el flujo de permisos, que es lo que más dudas generó.', cuando: 'Hoy, 16:21', ruta: '/app/s/estudio-diseno/sesiones/s1' },
   { resultadoId: 'b4', tipo: 'mensaje', servidorNombre: 'Estudio de Diseño', ubicacion: '#entregas', autorUid: 'u-lucia', fragmento: 'Recuerden justificar en la entrega por qué piden permisos de micrófono.', cuando: '29 sep', ruta: '/app/s/estudio-diseno/c/entregas' },
+  { resultadoId: 'b5', tipo: 'transcripcion', servidorNombre: 'Estudio de Diseño', ubicacion: 'Crítica de portafolio', autorUid: 'u-valeria', fragmento: 'La portada funciona, pero el segundo caso no explica qué problema resolvía.', cuando: 'Ayer, 18:35', ruta: '/app/s/estudio-diseno/sesiones/s2' },
+  { resultadoId: 'b6', tipo: 'mensaje', servidorNombre: 'Estudio de Diseño', ubicacion: '#recursos', autorUid: 'u-valeria', fragmento: 'Subí la rúbrica final del portafolio en PDF, revisen la sección de casos de estudio.', cuando: 'Ayer, 16:05', ruta: '/app/s/estudio-diseno/c/recursos' },
+  { resultadoId: 'b7', tipo: 'mensaje', servidorNombre: 'Estudio de Diseño', ubicacion: '#general', autorUid: 'u-mateo', fragmento: 'Les dejo esta referencia para la crítica de hoy: diez heurísticas de usabilidad.', cuando: 'Hoy, 11:20', ruta: '/app/s/estudio-diseno/c/general' },
 ]
+
+/** Resumen de cada servidor para las tarjetas de «Tus servidores» (Figma 06). */
+export const resumenServidores: Record<string, ResumenServidor> = {
+  'estudio-diseno': { canales: 7, enLlamada: 3 },
+  'club-lectura': { canales: 5, enLlamada: 0, actividad: 'Activo hace 2 h' },
+  'dev-latam': { canales: 14, enLlamada: 12 },
+  'foto-musica': { canales: 6, enLlamada: 0, actividad: 'Activo ayer' },
+}
+
+/** Invitaciones válidas (Figma 08). Prueba con talkwith.app/i/club-lectura-7KD2 */
+export const invitaciones: Invitacion[] = [
+  { codigo: 'club-lectura-7KD2', servidorId: 'club-lectura', invitaUid: 'u-sofia', expiraEn: '6 días', enLinea: 6, enLlamada: 2 },
+]
+
+/** Total de sesiones registradas por servidor (el historial muestra solo la primera página). */
+export const totalSesiones: Record<string, number> = { 'estudio-diseno': 28 }

@@ -36,7 +36,7 @@ import Configuracion from '../pages/settings/Configuracion'
  *                       /app/s/:id/sesiones       17 Historial
  *                       /app/s/:id/sesiones/:s    18–20 Detalle de sesión
  *                       /app/s/:id/grabaciones    21 Grabaciones
- *  + RoleGuard ........ /app/s/:id/ajustes/...    24–27 Configuración
+ *  + RoleGuard ........ /app/s/:id/ajustes/...    24–27 Configuración (pantalla completa)
  *  Cualquier otra ..... *                         29 No encontrada
  */
 const router = createBrowserRouter([
@@ -69,16 +69,22 @@ const router = createBrowserRouter([
               { path: 'sesiones', element: <Sesiones /> },
               { path: 'sesiones/:sessionId', element: <DetalleSesion /> },
               { path: 'grabaciones', element: <Grabaciones /> },
-              {
-                path: 'ajustes',
-                element: <RoleGuard roles={['propietario', 'admin']} />,
-                children: [
-                  { index: true, element: <Configuracion seccion="general" /> },
-                  { path: 'canales', element: <Configuracion seccion="canales" /> },
-                  { path: 'miembros', element: <Configuracion seccion="miembros" /> },
-                  { path: 'eliminar', element: <Configuracion seccion="eliminar" /> },
-                ],
-              },
+            ],
+          },
+        ],
+      },
+      {
+        // La configuración ocupa toda la pantalla (Figma 24–27), sin barra de servidores.
+        path: 's/:serverId/ajustes',
+        element: <MemberGuard />,
+        children: [
+          {
+            element: <RoleGuard roles={['propietario', 'admin']} />,
+            children: [
+              { index: true, element: <Configuracion seccion="general" /> },
+              { path: 'canales', element: <Configuracion seccion="canales" /> },
+              { path: 'miembros', element: <Configuracion seccion="miembros" /> },
+              { path: 'eliminar', element: <Configuracion seccion="eliminar" /> },
             ],
           },
         ],

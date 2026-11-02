@@ -1,5 +1,4 @@
 import { Outlet, useLocation, useParams } from 'react-router'
-import { DEFAULT_SERVER } from '../../lib/routes'
 import { channelService, serverService } from '../../services'
 import ChannelSidebar from './ChannelSidebar'
 import DemoPanel from './DemoPanel'
@@ -8,9 +7,10 @@ import TopBar from './TopBar'
 
 const titulos: [RegExp, string][] = [
   [/^\/app\/?$/, 'Inicio'],
-  [/^\/app\/servidores\/nuevo/, 'Crear servidor'],
+  // Crear y unirse se abren como modal encima del Inicio (Figma 07 y 08).
+  [/^\/app\/servidores\/nuevo/, 'Inicio'],
   [/^\/app\/servidores/, 'Tus servidores'],
-  [/^\/app\/unirse/, 'Unirse con invitación'],
+  [/^\/app\/unirse/, 'Inicio'],
   [/^\/app\/buscar/, 'Búsqueda'],
   [/^\/app\/perfil/, 'Tu perfil'],
   [/\/sesiones\/[^/]+/, 'Sesión'],
@@ -26,7 +26,7 @@ const titulos: [RegExp, string][] = [
 export default function AppLayout() {
   const { serverId, channelId } = useParams()
   const { pathname } = useLocation()
-  const servidorActivo = serverId ?? DEFAULT_SERVER
+  const servidorActivo = serverId ?? serverService.defaultId()
   const canal = channelId ? channelService.find(channelId) : undefined
   const enCanal = Boolean(canal)
 

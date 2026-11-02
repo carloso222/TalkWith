@@ -29,7 +29,7 @@ React 19, TypeScript, Vite, Tailwind CSS 4, React Router, Zustand y lucide-react
 ```
 src/
   components/
-    ui/          Button, Field, Modal, Avatar, Badge, ServerIcon, Logo
+    ui/          Button, Field, Modal, Avatar, Badge, Switch, Checkbox, Dropdown, Highlight, ServerIcon, Logo
     layout/      AppLayout, ServerBar, ChannelSidebar, TopBar, UserPanel, DemoPanel
     feedback/    ToastHost, ConfirmHost, Placeholder
   pages/         una carpeta por sección (auth, dashboard, channels, voice, history...)
@@ -79,6 +79,8 @@ La entrega usa términos de Angular. En React se cubren así:
 
 Usa siempre los helpers de `src/lib/routes.ts` (`rutas.canal(serverId, canalId)`, etc.) en lugar de escribir las rutas a mano.
 
+**Para la demo de las pantallas 08 y 11:** en *Unirse* pega `talkwith.app/i/club-lectura-7KD2` (invitación válida); en un canal de texto, el menú **⋯** tiene «Simular pérdida de conexión».
+
 **Modo demo:** el botón del matraz, abajo en la barra de servidores, permite simular el rol *miembro* para mostrar que `RoleGuard` bloquea la configuración y lanzar ejemplos de notificaciones.
 
 ## Reparto de pantallas
@@ -96,7 +98,7 @@ Cada página que todavía no está hecha muestra un aviso **"Por construir"** co
 1. **Nada de llamadas a API.** Los datos salen de `services/` (que leen `mocks/`). Si necesitas un dato nuevo, agrégalo en `mocks/data.ts` y expónlo desde un servicio.
 2. **Las confirmaciones no borran nada.** Se pregunta con `confirm()` y, si aceptan, solo se muestra un toast.
 3. **Usa los tokens del Figma.** Clases como `bg-panel`, `bg-raised`, `border-line`, `text-muted`, `bg-primary`, `text-voice` o `text-recording`, y la escala tipográfica `text-title`, `text-heading`, `text-body`, `text-small` y `text-caption`. Están definidos en `src/index.css`. Evita poner colores hex sueltos.
-4. **Reutiliza los componentes base** (`Button`, `Field`, `Modal`, `Avatar`, `Badge`) antes de crear otros nuevos.
+4. **Reutiliza los componentes base** (`Button`, `Field`, `Modal`, `Avatar`, `Badge`, `Switch`, `Checkbox`, `Dropdown`, `Highlight`) antes de crear otros nuevos.
 5. **TypeScript estricto.** Antes de abrir un PR, `npm run build` y `npm run lint` deben pasar sin errores.
 
 ## Flujo de trabajo con Git

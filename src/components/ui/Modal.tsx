@@ -36,16 +36,20 @@ export default function Modal({ open, onClose, titulo, descripcion, icono, child
           ancho === 'sm' ? 'max-w-md' : ancho === 'md' ? 'max-w-[520px]' : 'max-w-2xl',
         )}
       >
-        <div className="flex items-start justify-between gap-4">
+        {/* Sin ícono, el título comparte renglón con la X (Figma 25 · Crear canal). */}
+        <div className={cn('flex justify-between gap-4', icono ? 'items-start' : 'items-center')}>
           {icono && <span className={cn('flex size-12 items-center justify-center rounded-xl', tono === 'peligro' ? 'bg-recording/15 text-recording' : 'bg-primary/15 text-primary')}>{icono}</span>}
+          {!icono && <h2 id="modal-titulo" className="text-heading font-semibold">{titulo}</h2>}
           <button onClick={onClose} className="ml-auto rounded-lg p-2 text-muted hover:bg-raised hover:text-fg" aria-label="Cerrar">
             <X className="size-[18px]" />
           </button>
         </div>
-        <div className="flex flex-col gap-2">
-          <h2 id="modal-titulo" className="text-heading font-semibold">{titulo}</h2>
-          {descripcion && <p className="text-muted">{descripcion}</p>}
-        </div>
+        {(icono || descripcion) && (
+          <div className="flex flex-col gap-2">
+            {icono && <h2 id="modal-titulo" className="text-heading font-semibold">{titulo}</h2>}
+            {descripcion && <p className="text-muted">{descripcion}</p>}
+          </div>
+        )}
         {children}
         {acciones && <div className="flex justify-end gap-3">{acciones}</div>}
       </div>
