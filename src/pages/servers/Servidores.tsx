@@ -1,4 +1,4 @@
-import { Hash, Plus, Users } from 'lucide-react'
+import { AlertTriangle, Hash, Plus, Users } from 'lucide-react'
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router'
 import Badge, { type BadgeTone } from '../../components/ui/Badge'
@@ -29,7 +29,7 @@ const filtros: { valor: Filtro; label: string }[] = [
 export default function Servidores() {
   useDocumentTitle('Tus servidores')
   const navigate = useNavigate()
-  const { data: servidores, loading } = useService(() => serverService.getMine(), [])
+  const { data: servidores, loading, error, recargar } = useService(() => serverService.getMine(), [])
   const [filtro, setFiltro] = useState<Filtro>('todos')
 
   const lista = servidores ?? []
@@ -43,7 +43,11 @@ export default function Servidores() {
         <div className="flex flex-col gap-1.5">
           <h1 className="text-title font-bold tracking-tight">Tus servidores</h1>
           <p className="text-muted">
-            {loading ? 'Cargando tus servidores…' : `Perteneces a ${lista.length} servidores · ${activos} tienen actividad ahora`}
+            {loading
+              ? 'Cargando tus servidores…'
+              : lista.length === 0
+                ? 'Todavía no perteneces a ningún servidor'
+                : `Perteneces a ${lista.length} ${lista.length === 1 ? 'servidor' : 'servidores'} · ${activos} tienen actividad ahora`}
           </p>
         </div>
         <div className="flex gap-3">
@@ -71,21 +75,36 @@ export default function Servidores() {
         })}
       </div>
 
-      <div className="grid grid-cols-[repeat(auto-fill,minmax(290px,1fr))] gap-4">
-        {loading
-          ? Array.from({ length: 3 }, (_, i) => <div key={i} className="h-[206px] animate-pulse rounded-[14px] bg-panel" />)
-          : visibles.map((s) => <TarjetaServidor key={s.servidorId} servidor={s} />)}
-        <Link
-          to={rutas.crearServidor}
-          className="flex min-h-[206px] flex-col items-center justify-center gap-2.5 rounded-[14px] border-[1.5px] border-dashed border-line p-5 text-center transition-colors hover:border-muted/60 hover:bg-panel/40"
-        >
-          <span className="flex size-12 items-center justify-center rounded-full bg-raised">
-            <Plus className="size-[22px]" />
-          </span>
-          <span className="text-subtitle font-semibold">Crea o únete a un servidor</span>
-          <span className="text-small text-muted">Reúne a tu grupo en un espacio propio.</span>
-        </Link>
-      </div>
+      {error && (
+        <div className="flex flex-col items-center gap-3 rounded-2xl border border-recording/40 bg-recording/5 px-6 py-12 text-center">
+          <AlertTriangle className="size-7 text-recording" />
+          <p className="font-medium">No pudimos cargar tus servidores</p>
+          <p className="text-small text-muted">{error}</p>
+          <Button variant="secundario" size="sm" onClick={recargar}>Reintentar</Button>
+        </div>
+      )}
+
+      {!error && !loading && lista.length > 0 && visibles.length === 0 && (
+        <p className="text-small text-muted">No tienes servidores con este rol.</p>
+      )}
+
+      {!error && (
+        <div className="grid grid-cols-[repeat(auto-fill,minmax(290px,1fr))] gap-4">
+          {loading && !servidores
+            ? Array.from({ length: 3 }, (_, i) => <div key={i} className="h-[206px] animate-pulse rounded-[14px] bg-panel" />)
+            : visibles.map((s) => <TarjetaServidor key={s.servidorId} servidor={s} />)}
+          <Link
+            to={rutas.crearServidor}
+            className="flex min-h-[206px] flex-col items-center justify-center gap-2.5 rounded-[14px] border-[1.5px] border-dashed border-line p-5 text-center transition-colors hover:border-muted/60 hover:bg-panel/40"
+          >
+            <span className="flex size-12 items-center justify-center rounded-full bg-raised">
+              <Plus className="size-[22px]" />
+            </span>
+            <span className="text-subtitle font-semibold">Crea o únete a un servidor</span>
+            <span className="text-small text-muted">Reúne a tu grupo en un espacio propio.</span>
+          </Link>
+        </div>
+      )}
     </div>
   )
 }

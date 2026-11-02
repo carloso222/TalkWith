@@ -5,28 +5,18 @@ import Button from '../../components/ui/Button'
 import { Field, TextArea } from '../../components/ui/Field'
 import { cn } from '../../lib/cn'
 import { rutas } from '../../lib/routes'
+import { hayErrores, REGLAS, validarServidor } from '../../lib/validaciones'
+import { ApiError, enlaceInvitacion, manejarError, serverService } from '../../services'
 import { useUiStore } from '../../store/uiStore'
 import type { Servidor } from '../../types'
 import ModalServidor from './ModalServidor'
 import { useCerrarModal } from './useCerrarModal'
 
-const MAX_NOMBRE = 50
 const MAX_IMAGEN_MB = 5
-
-/** Convierte "Club de Diseño UX" en "club-diseno-ux" para el enlace de invitación. */
-const slug = (s: string) =>
-  s
-    .normalize('NFD')
-    .replace(/[̀-ͯ]/g, '')
-    .toLowerCase()
-    .replace(/\b(de|del|la|el|y)\b/g, '')
-    .trim()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-|-$/g, '')
 
 /**
  * Figma 07 · Crear servidor y 09 · Notificaciones. Responsable: Isaian.
- * No se guarda nada: al crear solo se muestran los toasts de ejemplo.
+ * Crea el servidor con serverService.create y copia su enlace de invitacion.
  */
 export default function CrearServidor() {
   const navigate = useNavigate()
@@ -39,23 +29,53 @@ export default function CrearServidor() {
   const [imagen, setImagen] = useState<string | null>(null)
   const archivo = useRef<HTMLInputElement>(null)
 
+  const [tocado, setTocado] = useState({ nombre: false, descripcion: false })
+  const [enviando, setEnviando] = useState(false)
+  // errores que regresa el servidor (por ejemplo nombre repetido)
+  const [errorServidor, setErrorServidor] = useState<{ nombre?: string; descripcion?: string }>({})
+
+  const errores = validarServidor({ nombre, descripcion, privacidad })
+  const errorNombre = (tocado.nombre ? errores.nombre : undefined) ?? errorServidor.nombre
+  const errorDescripcion = (tocado.descripcion ? errores.descripcion : undefined) ?? errorServidor.descripcion
+
   const elegirImagen = (f: File | undefined) => {
     if (!f) return
     if (f.size > MAX_IMAGEN_MB * 1024 * 1024) {
       notify('error', 'No se pudo subir la imagen', `El archivo supera los ${MAX_IMAGEN_MB} MB. Intenta con una imagen más ligera.`)
       return
     }
-    // Vista previa local; la imagen no se sube a ningún lado.
+    // solo vista previa, la imagen todavia no se sube
     setImagen(URL.createObjectURL(f))
   }
 
-  const crear = (e?: FormEvent) => {
-    e?.preventDefault()
-    const n = nombre.trim()
-    if (!n) return
-    notify('exito', 'Servidor creado correctamente', `${n} ya está listo. Invita a tu equipo para empezar.`)
-    notify('info', 'Enlace de invitación copiado', `talkwith.app/i/${slug(n) || 'servidor'}-9QF1 está en tu portapapeles.`)
-    navigate(rutas.inicio)
+  const crear = async (e: FormEvent) => {
+    e.preventDefault()
+    setTocado({ nombre: true, descripcion: true })
+    if (hayErrores(errores)) return
+
+    setEnviando(true)
+    try {
+      const { servidor, invitacion } = await serverService.create({ nombre, descripcion, privacidad })
+      const enlace = enlaceInvitacion(invitacion.codigo)
+      notify('exito', 'Servidor creado correctamente', `${servidor.nombre} ya está listo. Invita a tu equipo para empezar.`)
+
+      // si el navegador no deja copiar, solo mostramos el enlace
+      try {
+        await navigator.clipboard.writeText(enlace)
+        notify('info', 'Enlace de invitación copiado', `${enlace} está en tu portapapeles.`)
+      } catch {
+        notify('info', 'Enlace de invitación', `Compártelo con tu equipo: ${enlace}`)
+      }
+
+      navigate(rutas.canal(servidor.servidorId, `${servidor.servidorId}-general`))
+    } catch (err) {
+      if (err instanceof ApiError && (err.campo === 'nombre' || err.campo === 'descripcion')) {
+        setErrorServidor({ [err.campo]: err.message })
+      } else {
+        manejarError(err, 'No se pudo crear el servidor')
+      }
+      setEnviando(false)
+    }
   }
 
   return (
@@ -66,16 +86,19 @@ export default function CrearServidor() {
       icono={<Plus className="size-6" />}
       acciones={
         <>
-          <Button variant="secundario" onClick={cerrar}>Cancelar</Button>
-          <Button onClick={() => crear()} disabled={!nombre.trim()}>Crear servidor</Button>
+          <Button variant="secundario" onClick={cerrar} disabled={enviando}>Cancelar</Button>
+          <Button type="submit" form="form-servidor" loading={enviando}>
+            {enviando ? 'Creando…' : 'Crear servidor'}
+          </Button>
         </>
       }
     >
-      <form onSubmit={crear} className="flex flex-col gap-5">
+      <form id="form-servidor" onSubmit={crear} noValidate className="flex flex-col gap-5">
         <div className="flex items-center gap-4">
           <button
             type="button"
             onClick={() => archivo.current?.click()}
+            disabled={enviando}
             className="flex size-16 shrink-0 flex-col items-center justify-center gap-0.5 overflow-hidden rounded-full border-[1.5px] border-dashed border-line text-caption text-muted transition-colors hover:border-muted hover:text-fg"
             aria-label="Subir imagen del servidor"
           >
@@ -99,9 +122,15 @@ export default function CrearServidor() {
           label="Nombre del servidor"
           placeholder="Club de Diseño UX"
           value={nombre}
-          maxLength={MAX_NOMBRE}
-          onChange={(e) => setNombre(e.target.value)}
-          help={`${nombre.length} de ${MAX_NOMBRE} caracteres`}
+          maxLength={REGLAS.servidorNombreMax}
+          onChange={(e) => {
+            setNombre(e.target.value)
+            setErrorServidor({})
+          }}
+          onBlur={() => setTocado({ ...tocado, nombre: true })}
+          error={errorNombre}
+          help={`${nombre.length} de ${REGLAS.servidorNombreMax} caracteres`}
+          disabled={enviando}
           autoFocus
         />
         <TextArea
@@ -109,10 +138,14 @@ export default function CrearServidor() {
           placeholder="Comunidad para revisar portafolios y practicar entrevistas."
           value={descripcion}
           onChange={(e) => setDescripcion(e.target.value)}
+          onBlur={() => setTocado({ ...tocado, descripcion: true })}
+          error={errorDescripcion}
+          help={`${descripcion.length} de ${REGLAS.servidorDescripcionMax} caracteres`}
+          disabled={enviando}
           rows={2}
         />
 
-        <fieldset className="flex flex-col gap-2">
+        <fieldset className="flex flex-col gap-2" disabled={enviando}>
           <legend className="mb-2 text-small font-medium">Privacidad</legend>
           <div className="grid grid-cols-2 gap-2">
             <OpcionPrivacidad activa={privacidad === 'invitacion'} onClick={() => setPrivacidad('invitacion')} icono={<Lock className="size-4" />} titulo="Solo por invitación">

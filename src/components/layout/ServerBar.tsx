@@ -1,5 +1,5 @@
 import { Plus } from 'lucide-react'
-import { NavLink, useParams } from 'react-router'
+import { NavLink, useLocation, useParams } from 'react-router'
 import { useService } from '../../hooks/useService'
 import { cn } from '../../lib/cn'
 import { rutas } from '../../lib/routes'
@@ -10,7 +10,9 @@ import ServerIcon from '../ui/ServerIcon'
 /** Columna de 72 px con los servidores del usuario (Figma: "Barra de servidores"). */
 export default function ServerBar() {
   const { serverId } = useParams()
-  const { data: servidores } = useService(() => serverService.getMine(), [])
+  const { pathname } = useLocation()
+  // se vuelve a pedir al cambiar de pagina para mostrar servidores nuevos
+  const { data: servidores } = useService(() => serverService.getMine(), [pathname])
 
   return (
     <nav aria-label="Servidores" className="flex w-[72px] shrink-0 flex-col items-center gap-2 border-r border-line bg-base py-3">

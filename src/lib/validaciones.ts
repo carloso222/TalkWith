@@ -6,6 +6,9 @@ export const REGLAS = {
   canalNombreMin: 2,
   canalNombreMax: 30,
   canalDescripcionMax: 120,
+  servidorNombreMin: 3,
+  servidorNombreMax: 50,
+  servidorDescripcionMax: 200,
   contrasenaMin: 8,
   nombreMin: 2,
   nombreMax: 32,
@@ -44,6 +47,29 @@ export function validarCanal(datos: DatosCanal, roles: string[] = []) {
   }
 
   if (datos.privado && roles.length === 0) errores.roles = 'Agrega al menos un rol que pueda entrar.'
+
+  return errores
+}
+
+/* ---------- servidores ---------- */
+
+export interface DatosServidor {
+  nombre: string
+  descripcion: string
+  privacidad: 'invitacion' | 'enlace'
+}
+
+export function validarServidor(datos: DatosServidor) {
+  const errores: { nombre?: string; descripcion?: string } = {}
+  const nombre = datos.nombre.trim()
+
+  if (!nombre) errores.nombre = 'El servidor necesita un nombre.'
+  else if (nombre.length < REGLAS.servidorNombreMin) errores.nombre = `Mínimo ${REGLAS.servidorNombreMin} caracteres.`
+  else if (nombre.length > REGLAS.servidorNombreMax) errores.nombre = `Máximo ${REGLAS.servidorNombreMax} caracteres.`
+
+  if (datos.descripcion.trim().length > REGLAS.servidorDescripcionMax) {
+    errores.descripcion = `Máximo ${REGLAS.servidorDescripcionMax} caracteres.`
+  }
 
   return errores
 }
