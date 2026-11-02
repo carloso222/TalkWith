@@ -1,7 +1,7 @@
 import { Navigate, useParams } from 'react-router'
 import { channelService } from '../../services'
 import CanalTexto from './CanalTexto'
-import CanalVoz from '../voice/CanalVoz'
+import CanalVoz from '../voice/VoiceChannel'
 
 /** /app/s/:serverId/c/:channelId — elige la vista según el tipo de canal. */
 export default function Canal() {
