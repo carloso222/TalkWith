@@ -27,13 +27,13 @@ export function Field({ label, help, error, icon, className, ...rest }: Base & I
   )
 }
 
-export function TextArea({ label, help, className, ...rest }: Base & TextareaHTMLAttributes<HTMLTextAreaElement>) {
+export function TextArea({ label, help, error, className, ...rest }: Base & TextareaHTMLAttributes<HTMLTextAreaElement>) {
   const id = useId()
   return (
     <div className={cn('flex flex-col gap-2', className)}>
       <label htmlFor={id} className="text-small font-medium">{label}</label>
-      <textarea id={id} rows={3} {...rest} className={cn(control, 'resize-none py-3')} />
-      {help && <p className="text-caption text-muted">{help}</p>}
+      <textarea id={id} rows={3} {...rest} aria-invalid={Boolean(error)} className={cn(control, 'resize-none py-3', error && 'border-recording')} />
+      {error ? <p className="text-caption text-recording">{error}</p> : help && <p className="text-caption text-muted">{help}</p>}
     </div>
   )
 }

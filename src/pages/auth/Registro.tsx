@@ -9,30 +9,21 @@ import GoogleLogo from '../../components/ui/GoogleLogo'
 import Logo from '../../components/ui/Logo'
 import { useDocumentTitle } from '../../hooks/useDocumentTitle'
 import { rutas } from '../../lib/routes'
+import { hayErrores, REGLAS, validarRegistro } from '../../lib/validaciones'
 import { CURRENT_UID, usuarios } from '../../mocks/data'
+import { ApiError, authService, manejarError } from '../../services'
 import { useAuthStore } from '../../store/authStore'
 import { useUiStore } from '../../store/uiStore'
 import { Halos } from './Login'
 
-const MAX_NOMBRE = 32
-const USUARIOS_OCUPADOS = usuarios.filter((u) => u.uid !== CURRENT_UID).map((u) => u.usuario)
-
 /** Datos que "regresa Google" en la primera entrada (simulados). */
 const cuentaGoogle = usuarios.find((u) => u.uid === CURRENT_UID)!
-
-function validarUsuario(valor: string): string | undefined {
-  const limpio = valor.replace(/^@/, '')
-  if (!limpio) return 'Elige un nombre de usuario.'
-  if (!/^[a-z0-9.]+$/.test(limpio)) return 'Solo letras minúsculas, números y puntos.'
-  if (limpio.length < 3) return 'Debe tener al menos 3 caracteres.'
-  if (USUARIOS_OCUPADOS.includes(limpio)) return 'Ese nombre de usuario ya está en uso.'
-}
 
 /**
  * Figma 04 · Registro — completar perfil. Responsable: Carlos.
  * Se muestra la primera vez que alguien entra con Google: confirma su nombre
  * visible, elige un nombre de usuario único y acepta términos y la política de
- * grabación. No se guarda nada; al terminar se inicia la sesión simulada.
+ * grabación. Los datos se validan y se envian a authService.registrar.
  */
 export default function Registro() {
   useDocumentTitle('Completa tu perfil')
@@ -44,23 +35,31 @@ export default function Registro() {
   const [usuario, setUsuario] = useState(`@${cuentaGoogle.usuario}`)
   const [terminos, setTerminos] = useState(false)
   const [grabacion, setGrabacion] = useState(false)
-  const [tocado, setTocado] = useState({ nombre: false, usuario: false })
+  const [tocado, setTocado] = useState({ nombre: false, usuario: false, casillas: false })
   const [enviando, setEnviando] = useState(false)
+  // error que regresa el servidor, por ejemplo usuario ocupado
+  const [errorUsuarioServidor, setErrorUsuarioServidor] = useState('')
 
-  const errorNombre = nombre.trim().length < 2 ? 'Escribe cómo quieres que te vean (mínimo 2 caracteres).' : undefined
-  const errorUsuario = validarUsuario(usuario)
-  const valido = !errorNombre && !errorUsuario && terminos && grabacion
+  const errores = validarRegistro({ nombre, usuario, terminos, grabacion })
+  const errorNombre = tocado.nombre ? errores.nombre : undefined
+  const errorUsuario = (tocado.usuario ? errores.usuario : undefined) ?? (errorUsuarioServidor || undefined)
 
-  const enviar = (e: FormEvent) => {
+  const enviar = async (e: FormEvent) => {
     e.preventDefault()
-    setTocado({ nombre: true, usuario: true })
-    if (!valido) return
+    setTocado({ nombre: true, usuario: true, casillas: true })
+    if (hayErrores(errores)) return
+
     setEnviando(true)
-    setTimeout(() => {
+    try {
+      const cuenta = await authService.registrar({ nombre, usuario })
       completarPerfil()
-      notify('exito', '¡Bienvenido a TalkWith!', 'Tu cuenta está lista. Crea un servidor o únete con una invitación.')
+      notify('exito', `¡Bienvenido a TalkWith, ${cuenta.nombre.split(' ')[0]}!`, 'Tu cuenta está lista. Crea un servidor o únete con una invitación.')
       navigate(rutas.inicio, { replace: true })
-    }, 900)
+    } catch (err) {
+      if (err instanceof ApiError && err.campo === 'usuario') setErrorUsuarioServidor(err.message)
+      else manejarError(err, 'No pudimos crear tu cuenta')
+      setEnviando(false)
+    }
   }
 
   return (
@@ -91,23 +90,29 @@ export default function Registro() {
           <Field
             label="Nombre visible"
             value={nombre}
-            maxLength={MAX_NOMBRE}
+            maxLength={REGLAS.nombreMax}
             autoComplete="name"
             onChange={(e) => setNombre(e.target.value)}
-            onBlur={() => setTocado((t) => ({ ...t, nombre: true }))}
-            error={tocado.nombre ? errorNombre : undefined}
-            help={`${nombre.length} de ${MAX_NOMBRE} caracteres`}
+            onBlur={() => setTocado({ ...tocado, nombre: true })}
+            error={errorNombre}
+            help={`${nombre.length} de ${REGLAS.nombreMax} caracteres`}
+            disabled={enviando}
           />
 
           <Field
             label="Nombre de usuario"
             value={usuario}
+            maxLength={REGLAS.usuarioMax + 1}
             autoComplete="username"
             spellCheck={false}
-            onChange={(e) => setUsuario('@' + e.target.value.replace(/^@+/, '').toLowerCase())}
-            onBlur={() => setTocado((t) => ({ ...t, usuario: true }))}
-            error={tocado.usuario ? errorUsuario : undefined}
+            onChange={(e) => {
+              setUsuario('@' + e.target.value.replace(/^@+/, '').toLowerCase())
+              setErrorUsuarioServidor('')
+            }}
+            onBlur={() => setTocado({ ...tocado, usuario: true })}
+            error={errorUsuario}
             help="Solo letras, números y puntos. Debe ser único."
+            disabled={enviando}
           />
 
           <div className="flex flex-col gap-2">
@@ -127,7 +132,7 @@ export default function Registro() {
             <Checkbox checked={grabacion} onChange={setGrabacion}>
               Entiendo que las llamadas pueden transcribirse y que una grabación solo inicia con el consentimiento de todos.
             </Checkbox>
-            {tocado.usuario && (!terminos || !grabacion) && <p className="text-caption text-recording">Para continuar acepta ambas casillas.</p>}
+            {tocado.casillas && errores.casillas && <p className="text-caption text-recording">{errores.casillas}</p>}
           </div>
 
           <Button type="submit" block loading={enviando}>
