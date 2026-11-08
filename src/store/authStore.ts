@@ -1,45 +1,39 @@
 import { create } from 'zustand'
-import { createJSONStorage, persist } from 'zustand/middleware'
-import { CURRENT_UID, usuarios } from '../mocks/data'
+import { cerrarSesion } from '../services/authService'
 import type { Rol, Usuario } from '../types'
 
 /**
- * Sesión simulada. En esta entrega no hay Firebase Auth: "Continuar con Google"
- * solo llena este store con un usuario de ejemplo.
+ * Sesión en memoria. La fuente de verdad es Firebase Auth: el listener de
+ * `lib/sesion.ts` llena este store al cargar la página y lo limpia al salir.
+ * No se persiste en ningún almacenamiento del navegador.
  *
- * `rolDemo` sobrescribe el rol real para poder demostrar las guardias en la
- * presentación (p. ej. que un "miembro" no puede abrir la configuración).
+ * `rolDemo` sobrescribe el rol real solo en desarrollo, para demostrar las guardias.
  */
+export type EstadoSesion = 'cargando' | 'anonimo' | 'autenticado'
+
 interface AuthState {
+  estado: EstadoSesion
   usuario: Usuario | null
   rolDemo: Rol | null
   perfilCompleto: boolean
-  login: () => void
-  logout: () => void
-  completarPerfil: () => void
+  setSesion: (usuario: Usuario, perfilCompleto: boolean) => void
+  /** Vuelve al estado anónimo (incluido `rolDemo`). */
+  limpiar: () => void
   setRolDemo: (rol: Rol | null) => void
+  /** Cierra la sesión en Firebase; la limpieza del estado la hace el listener. */
+  logout: () => Promise<void>
   /** Actualiza el usuario en memoria (no se guarda en ningún servidor). */
   actualizarPerfil: (cambios: Partial<Pick<Usuario, 'nombre' | 'usuario' | 'estadoTexto'>>) => void
 }
 
-const usuarioDemo = usuarios.find((u) => u.uid === CURRENT_UID)!
-
-export const useAuthStore = create<AuthState>()(
-  persist(
-    (set) => ({
-      usuario: null,
-      rolDemo: null,
-      perfilCompleto: true,
-      login: () => set({ usuario: usuarioDemo }),
-      logout: () => set({ usuario: null, rolDemo: null }),
-      completarPerfil: () => set({ usuario: usuarioDemo, perfilCompleto: true }),
-      setRolDemo: (rolDemo) => set({ rolDemo }),
-      actualizarPerfil: (cambios) => set((s) => (s.usuario ? { usuario: { ...s.usuario, ...cambios } } : s)),
-    }),
-    {
-      name: 'talkwith-auth',
-      // sessionStorage: la sesión de demo sobrevive a un recargo pero no se queda guardada.
-      storage: createJSONStorage(() => sessionStorage),
-    },
-  ),
-)
+export const useAuthStore = create<AuthState>()((set) => ({
+  estado: 'cargando',
+  usuario: null,
+  rolDemo: null,
+  perfilCompleto: false,
+  setSesion: (usuario, perfilCompleto) => set({ estado: 'autenticado', usuario, perfilCompleto }),
+  limpiar: () => set({ estado: 'anonimo', usuario: null, rolDemo: null, perfilCompleto: false }),
+  setRolDemo: (rolDemo) => set({ rolDemo }),
+  logout: () => cerrarSesion(),
+  actualizarPerfil: (cambios) => set((s) => (s.usuario ? { usuario: { ...s.usuario, ...cambios } } : s)),
+}))

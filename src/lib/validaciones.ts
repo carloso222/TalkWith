@@ -9,14 +9,11 @@ export const REGLAS = {
   servidorNombreMin: 3,
   servidorNombreMax: 50,
   servidorDescripcionMax: 200,
-  contrasenaMin: 8,
   nombreMin: 2,
   nombreMax: 32,
   usuarioMin: 3,
   usuarioMax: 20,
 }
-
-const CORREO = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
 // regresa true si algun campo tiene error
 export function hayErrores(errores: Record<string, string | undefined>) {
@@ -70,25 +67,6 @@ export function validarServidor(datos: DatosServidor) {
   if (datos.descripcion.trim().length > REGLAS.servidorDescripcionMax) {
     errores.descripcion = `Máximo ${REGLAS.servidorDescripcionMax} caracteres.`
   }
-
-  return errores
-}
-
-/* ---------- login ---------- */
-
-export interface DatosLogin {
-  correo: string
-  contrasena: string
-}
-
-export function validarLogin(datos: DatosLogin) {
-  const errores: { correo?: string; contrasena?: string } = {}
-
-  if (!datos.correo.trim()) errores.correo = 'Escribe tu correo.'
-  else if (!CORREO.test(datos.correo.trim())) errores.correo = 'Escribe un correo válido, por ejemplo nombre@gmail.com.'
-
-  if (!datos.contrasena) errores.contrasena = 'Escribe tu contraseña.'
-  else if (datos.contrasena.length < REGLAS.contrasenaMin) errores.contrasena = `Debe tener al menos ${REGLAS.contrasenaMin} caracteres.`
 
   return errores
 }
