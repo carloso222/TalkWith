@@ -10,29 +10,27 @@ import Logo from '../../components/ui/Logo'
 import { useDocumentTitle } from '../../hooks/useDocumentTitle'
 import { rutas } from '../../lib/routes'
 import { hayErrores, REGLAS, validarRegistro } from '../../lib/validaciones'
-import { CURRENT_UID, usuarios } from '../../mocks/data'
-import { ApiError, authService, manejarError } from '../../services'
+import { ApiError, manejarError } from '../../services'
+import { completarRegistro } from '../../services/perfilService'
 import { useAuthStore } from '../../store/authStore'
 import { useUiStore } from '../../store/uiStore'
 import { Halos } from './Login'
-
-/** Datos que "regresa Google" en la primera entrada (simulados). */
-const cuentaGoogle = usuarios.find((u) => u.uid === CURRENT_UID)!
 
 /**
  * Figma 04 · Registro — completar perfil. Responsable: Carlos.
  * Se muestra la primera vez que alguien entra con Google: confirma su nombre
  * visible, elige un nombre de usuario único y acepta términos y la política de
- * grabación. Los datos se validan y se envian a authService.registrar.
+ * grabación. Los datos del perfil salen de la cuenta de Google (ya autenticada).
  */
 export default function Registro() {
   useDocumentTitle('Completa tu perfil')
   const navigate = useNavigate()
-  const completarPerfil = useAuthStore((s) => s.completarPerfil)
+  const cuenta = useAuthStore((s) => s.usuario)!
+  const setSesion = useAuthStore((s) => s.setSesion)
   const notify = useUiStore((s) => s.notify)
 
-  const [nombre, setNombre] = useState(cuentaGoogle.nombre)
-  const [usuario, setUsuario] = useState(`@${cuentaGoogle.usuario}`)
+  const [nombre, setNombre] = useState(cuenta.nombre)
+  const [usuario, setUsuario] = useState('@')
   const [terminos, setTerminos] = useState(false)
   const [grabacion, setGrabacion] = useState(false)
   const [tocado, setTocado] = useState({ nombre: false, usuario: false, casillas: false })
@@ -51,9 +49,9 @@ export default function Registro() {
 
     setEnviando(true)
     try {
-      const cuenta = await authService.registrar({ nombre, usuario })
-      completarPerfil()
-      notify('exito', `¡Bienvenido a TalkWith, ${cuenta.nombre.split(' ')[0]}!`, 'Tu cuenta está lista. Crea un servidor o únete con una invitación.')
+      const registrada = await completarRegistro(cuenta, { nombre, usuario })
+      setSesion(registrada, true)
+      notify('exito', `¡Bienvenido a TalkWith, ${registrada.nombre.split(' ')[0]}!`, 'Tu cuenta está lista. Crea un servidor o únete con una invitación.')
       navigate(rutas.inicio, { replace: true })
     } catch (err) {
       if (err instanceof ApiError && err.campo === 'usuario') setErrorUsuarioServidor(err.message)
@@ -78,7 +76,7 @@ export default function Registro() {
           </div>
 
           <div className="flex items-center gap-4">
-            <Avatar uid={CURRENT_UID} size="lg" />
+            <Avatar uid={cuenta.uid} size="lg" />
             <div className="flex flex-col gap-1">
               <p className="text-small font-medium">Foto de tu cuenta de Google</p>
               <button type="button" onClick={() => notify('info', 'Cambiar foto', 'En esta entrega la foto se toma de tu cuenta de Google.')} className="self-start text-small font-medium text-primary hover:underline">
@@ -119,7 +117,7 @@ export default function Registro() {
             <span className="text-small font-medium">Correo</span>
             <div className="flex h-11 items-center gap-2.5 rounded-[10px] border border-line bg-base px-3.5 text-body text-muted">
               <GoogleLogo size={16} />
-              <span className="flex-1 truncate">{cuentaGoogle.correo}</span>
+              <span className="flex-1 truncate">{cuenta.correo}</span>
               <Lock className="size-4" aria-label="No editable" />
             </div>
             <span className="text-caption text-muted">Vinculado con tu cuenta de Google</span>

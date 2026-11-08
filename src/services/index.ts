@@ -11,47 +11,14 @@
  */
 import { validarCanal, validarServidor, type DatosCanal, type DatosServidor } from '../lib/validaciones'
 import * as db from '../mocks/data'
-import type { Canal, Grabacion, Invitacion, Mensaje, Miembro, ResumenInicio, ResumenServidor, Servidor, SesionVoz, Usuario } from '../types'
+import type { Canal, Grabacion, Invitacion, Mensaje, Miembro, ResumenInicio, ResumenServidor, Servidor, SesionVoz } from '../types'
 import { ApiError } from './errores'
+import { uidDeDatos } from './sesionDatos'
+import { LATENCIA_MS, simular } from './simular'
 
 export { ApiError, manejarError, mensajeDeError } from './errores'
 
-const LATENCIA_MS = 250
-
-function simular<T>(valor: T): Promise<T> {
-  return new Promise((resolve) => setTimeout(() => resolve(structuredClone(valor)), LATENCIA_MS))
-}
-
-/* ---------- Autenticacion ---------- */
-
-// cuenta de prueba: correo del usuario demo y esta contrasena
-export const CONTRASENA_DEMO = 'talkwith123'
-
-export const authService = {
-  login: (correo: string, contrasena: string): Promise<Usuario> =>
-    responder(() => {
-      const usuario = db.usuarios.find((u) => u.uid === db.CURRENT_UID)
-      const coincide = usuario && usuario.correo === correo.trim().toLowerCase() && contrasena === CONTRASENA_DEMO
-      if (!usuario || !coincide) throw new ApiError(401, 'Correo o contraseña incorrectos.')
-      return usuario
-    }),
-  registrar: (datos: { nombre: string; usuario: string }): Promise<Usuario> =>
-    responder(() => {
-      const usuario = datos.usuario.replace(/^@/, '')
-      const ocupado = db.usuarios.some((u) => u.usuario === usuario && u.uid !== db.CURRENT_UID)
-      if (ocupado) throw new ApiError(409, 'Ese nombre de usuario ya está en uso.', 'usuario')
-      const actual = db.usuarios.find((u) => u.uid === db.CURRENT_UID)!
-      return { ...actual, nombre: datos.nombre.trim(), usuario }
-    }),
-}
-
-/* ---------- Usuarios ---------- */
-export const userService = {
-  getAll: () => simular(db.usuarios),
-  getById: (uid: string) => simular(db.usuarios.find((u) => u.uid === uid) ?? null),
-  /** Acceso síncrono para pintar avatares y nombres sin estado de carga. */
-  find: (uid: string): Usuario | undefined => db.usuarios.find((u) => u.uid === uid),
-}
+export { userService } from './userService'
 
 /* ---------- Guardado local ---------- */
 
@@ -120,15 +87,15 @@ function revisarServidor(datos: DatosServidor, uid: string) {
 export const enlaceInvitacion = (codigo: string) => `talkwith.app/i/${codigo}`
 
 export const serverService = {
-  getMine: (uid: string = db.CURRENT_UID): Promise<Servidor[]> =>
+  getMine: (uid?: string): Promise<Servidor[]> =>
     responder(() => {
-      const ids = listaMiembros.filter((m) => m.uid === uid).map((m) => m.servidorId)
+      const ids = listaMiembros.filter((m) => m.uid === uidDeDatos(uid)).map((m) => m.servidorId)
       return listaServidores.filter((s) => ids.includes(s.servidorId))
     }),
   getById: (id: string) => simular(listaServidores.find((s) => s.servidorId === id) ?? null),
   find: (id: string): Servidor | undefined => listaServidores.find((s) => s.servidorId === id),
   list: (): Servidor[] => listaServidores,
-  defaultId: (uid: string = db.CURRENT_UID): string => listaMiembros.find((m) => m.uid === uid)?.servidorId ?? '',
+  defaultId: (uid?: string): string => listaMiembros.find((m) => m.uid === uidDeDatos(uid))?.servidorId ?? '',
   /** Canales, personas en llamada y última actividad de un servidor. */
   summary: (id: string): ResumenServidor => {
     const resumen = db.resumenServidores[id]
@@ -139,8 +106,9 @@ export const serverService = {
     }
   },
   /** Crea el servidor con sus canales iniciales, la membresia del dueño y una invitacion. */
-  create: (datos: DatosServidor, uid: string = db.CURRENT_UID): Promise<{ servidor: Servidor; invitacion: Invitacion }> =>
+  create: (datos: DatosServidor, uid?: string): Promise<{ servidor: Servidor; invitacion: Invitacion }> =>
     responder(() => {
+      uid = uidDeDatos(uid)
       revisarServidor(datos, uid)
       const nombre = datos.nombre.trim()
       const servidorId = `${crearSlug(nombre) || 'servidor'}-${Date.now().toString(36)}`
@@ -202,8 +170,9 @@ export const inviteService = {
   getByServer: (servidorId: string): Promise<Invitacion | null> =>
     simular(listaInvitaciones.find((i) => i.servidorId === servidorId) ?? null),
   /** Agrega al usuario como miembro del servidor de la invitacion. */
-  join: (texto: string, uid: string = db.CURRENT_UID): Promise<Servidor> =>
+  join: (texto: string, uid?: string): Promise<Servidor> =>
     responder(() => {
+      uid = uidDeDatos(uid)
       const codigo = leerCodigo(texto)
       const invitacion = listaInvitaciones.find((i) => i.codigo.toLowerCase() === codigo)
       const servidor = invitacion && listaServidores.find((s) => s.servidorId === invitacion.servidorId)
@@ -232,9 +201,9 @@ export const inviteService = {
 export const memberService = {
   getByServer: (servidorId: string): Promise<Miembro[]> => simular(listaMiembros.filter((m) => m.servidorId === servidorId)),
   /** Rol del usuario actual en un servidor, o null si no es miembro. */
-  roleOf: (servidorId: string, uid: string = db.CURRENT_UID) =>
-    listaMiembros.find((m) => m.servidorId === servidorId && m.uid === uid)?.rol ?? null,
-  isMember: (servidorId: string, uid: string = db.CURRENT_UID) => listaMiembros.some((m) => m.servidorId === servidorId && m.uid === uid),
+  roleOf: (servidorId: string, uid?: string) =>
+    listaMiembros.find((m) => m.servidorId === servidorId && m.uid === uidDeDatos(uid))?.rol ?? null,
+  isMember: (servidorId: string, uid?: string) => listaMiembros.some((m) => m.servidorId === servidorId && m.uid === uidDeDatos(uid)),
 }
 
 /* ---------- Canales ---------- */
@@ -333,8 +302,8 @@ export const channelService = {
   inCall: (canalId: string): string[] => db.enLlamada[canalId] ?? [],
   isMuted: (uid: string): boolean => db.silenciados.includes(uid),
   /** Menciones al usuario en un canal, contadas a partir de los mensajes. */
-  mentions: (canalId: string, uid: string = db.CURRENT_UID): number =>
-    db.mensajes.filter((m) => m.canalId === canalId && m.menciones?.includes(uid)).length,
+  mentions: (canalId: string, uid?: string): number =>
+    db.mensajes.filter((m) => m.canalId === canalId && m.menciones?.includes(uidDeDatos(uid))).length,
   readIds: (): string[] => db.canalesLeidos,
   /** Personas escribiendo ahora mismo en un canal de texto. */
   typing: (canalId: string): string[] => db.escribiendo[canalId] ?? [],
@@ -396,8 +365,8 @@ export const searchService = {
 
 /* ---------- Resumen de Inicio ---------- */
 export const dashboardService = {
-  getResumen: (uid: string = db.CURRENT_UID): Promise<ResumenInicio> => {
-    const ids = db.miembros.filter((m) => m.uid === uid).map((m) => m.servidorId)
+  getResumen: (uid?: string): Promise<ResumenInicio> => {
+    const ids = db.miembros.filter((m) => m.uid === uidDeDatos(uid)).map((m) => m.servidorId)
     const canal = db.canales.find(
       (c) => c.tipo === 'voz' && ids.includes(c.servidorId) && (db.enLlamada[c.canalId]?.length ?? 0) > 0,
     )
