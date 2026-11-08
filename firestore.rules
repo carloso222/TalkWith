@@ -67,21 +67,36 @@ service cloud.firestore {
         && perfilValido(request.resource.data)
         && request.resource.data.creadoEn == resource.data.creadoEn
         && (request.resource.data.get('usuario', null) == resource.data.get('usuario', null)
-          || getAfter(/databases/$(database)/documents/nombresUsuario/$(request.resource.data.usuario)).data.uid == request.auth.uid);
+          || (getAfter(rutaNombre(request.resource.data.usuario)).data.uid == request.auth.uid
+            // Cambiar de nombre exige liberar el anterior en el mismo batch (evita acaparar nombres).
+            && (!('usuario' in resource.data) || !existsAfter(rutaNombre(resource.data.usuario)))));
       allow delete: if false;
     }
 
-    // Reserva única del nombre de usuario.
+    function rutaNombre(handle) {
+      return /databases/$(database)/documents/nombresUsuario/$(handle);
+    }
+    function usuarioDespues() {
+      return getAfter(/databases/$(database)/documents/usuarios/$(request.auth.uid)).data.get('usuario', null);
+    }
+
+    // Reserva única del nombre de usuario. Solo se reserva el nombre que el perfil propio queda usando
+    // en el mismo batch, y solo se libera si el perfil deja de usarlo (evita acaparar y duplicar nombres).
     match /nombresUsuario/{handle} {
       allow get: if autenticado();
       allow create: if autenticado()
         && handle.matches('^[a-z0-9.]{3,20}$')
         && request.resource.data.keys().hasOnly(['uid'])
-        && request.resource.data.uid == request.auth.uid;
-      allow delete: if autenticado() && resource.data.uid == request.auth.uid;
+        && request.resource.data.uid == request.auth.uid
+        && usuarioDespues() == handle;
+      allow delete: if autenticado() && resource.data.uid == request.auth.uid
+        && usuarioDespues() != handle;
     }
 
     // ---------- servidores ----------
+    function rutaLapida(sid) {
+      return /databases/$(database)/documents/servidoresEliminados/$(sid);
+    }
     function servidorValido(d) {
       return d.keys().hasOnly(['nombre', 'descripcion', 'iniciales', 'color', 'propietarioUid', 'privacidad', 'creadoEn'])
         && d.keys().hasAll(['nombre', 'descripcion', 'iniciales', 'color', 'propietarioUid', 'privacidad', 'creadoEn'])
@@ -97,7 +112,9 @@ service cloud.firestore {
       allow create: if autenticado()
         && servidorValido(request.resource.data)
         && request.resource.data.propietarioUid == request.auth.uid
-        && request.resource.data.creadoEn == request.time;
+        && request.resource.data.creadoEn == request.time
+        // Un id con lápida no se reutiliza: los datos huérfanos del servidor anterior siguen ahí.
+        && !exists(rutaLapida(sid));
       allow update: if gestor(sid)
         && soloCampos(['nombre', 'descripcion', 'privacidad', 'color', 'iniciales'])
         && servidorValido(request.resource.data);
@@ -252,6 +269,11 @@ service cloud.firestore {
         }
 
         // ---------- metadatos de grabaciones (el archivo vive en Storage) ----------
+        // Se compara por segmentos y no con regex: un id con metacaracteres (p. ej. «.*») no debe ampliar el patrón.
+        function rutaGrabacion(r, srv, s) {
+          let partes = r is string ? r.split('/') : [];
+          return partes.size() == 4 && partes[0] == 'grabaciones' && partes[1] == srv && partes[2] == s && partes[3].size() > 0;
+        }
         match /grabaciones/{gid} {
           allow read: if miembro(sid);
           allow create: if miembro(sid)
@@ -260,8 +282,7 @@ service cloud.firestore {
             && request.resource.data.creadorUid == request.auth.uid
             && request.resource.data.servidorId == sid
             && request.resource.data.sesionId == ses
-            && request.resource.data.ruta is string
-            && request.resource.data.ruta.matches('^grabaciones/' + sid + '/' + ses + '/[^/]+$')
+            && rutaGrabacion(request.resource.data.ruta, sid, ses)
             && get(/databases/$(database)/documents/servidores/$(sid)/sesiones/$(ses)/consentimientos/$(request.auth.uid)).data.estado == 'aceptado';
           allow update: if miembro(sid)
             && resource.data.creadorUid == request.auth.uid
@@ -286,7 +307,23 @@ service cloud.firestore {
       allow read: if miembro(resource.data.servidorId);
     }
 
+    // Lápida: el propietario la escribe en el mismo batch que borra el servidor.
+    match /servidoresEliminados/{sid} {
+      allow read: if false;
+      allow create: if autenticado()
+        && exists(rutaServidor(sid))
+        && get(rutaServidor(sid)).data.propietarioUid == request.auth.uid
+        && !existsAfter(rutaServidor(sid))
+        && request.resource.data.keys().hasOnly(['eliminadoEn'])
+        && request.resource.data.eliminadoEn == request.time;
+    }
+
     // ---------- invitaciones ----------
+    // La vista previa debe copiar los datos reales del servidor (evita invitaciones que suplantan a otro).
+    function vistaPreviaReal(d) {
+      let srv = getAfter(rutaServidor(d.servidorId)).data;
+      return d.servidorNombre == srv.nombre && d.servidorIniciales == srv.iniciales && d.servidorColor == srv.color;
+    }
     match /invitaciones/{codigo} {
       // Se puede leer una invitación si se conoce el código, pero no listarlas.
       allow get: if autenticado();
@@ -296,6 +333,7 @@ service cloud.firestore {
         && request.resource.data.keys().hasOnly(['servidorId', 'invitaUid', 'creadaEn', 'expiraEn', 'servidorNombre', 'servidorIniciales', 'servidorColor'])
         && request.resource.data.keys().hasAll(['servidorId', 'invitaUid', 'creadaEn', 'expiraEn', 'servidorNombre', 'servidorIniciales', 'servidorColor'])
         && gestorDespues(request.resource.data.servidorId)
+        && vistaPreviaReal(request.resource.data)
         && request.resource.data.invitaUid == request.auth.uid
         && request.resource.data.creadaEn == request.time
         && request.resource.data.expiraEn is timestamp
