@@ -40,12 +40,9 @@ describe('S1 reusar el id de un servidor eliminado', () => {
     await assertFails(setDoc(doc(db('forastero'), 'servidoresEliminados/Z'), { eliminadoEn: serverTimestamp() }))
   })
 
-  // Riesgo ABIERTO: el borrado simple (sin lápida) sigue permitido por la prueba DoD-16 existente.
-  // `it.fails` documenta el hueco; cuando se exija la lápida al borrar, esta prueba se pondrá roja y debe pasar a `it`.
-  it.fails('ABIERTO: tras un borrado simple, un exmiembro recrea el servidor y lee el historial', async () => {
-    await assertSucceeds(retirarALuis())
-    await assertSucceeds(deleteDoc(doc(db('dueno'), 'servidores/A')))
-    await assertFails(arrancar(db('luis'), 'A', 'luis').commit())
+  // El borrado simple (sin lápida) se rechaza: el servidor solo se borra en batch con `servidoresEliminados/{sid}`.
+  it('un borrado simple del servidor, sin lápida, se rechaza', async () => {
+    await assertFails(deleteDoc(doc(db('dueno'), 'servidores/A')))
   })
 })
 

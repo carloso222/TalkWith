@@ -1,5 +1,5 @@
 import { assertFails, assertSucceeds } from '@firebase/rules-unit-testing'
-import { deleteDoc, doc, updateDoc } from 'firebase/firestore'
+import { deleteDoc, doc, serverTimestamp, updateDoc, writeBatch } from 'firebase/firestore'
 import { describe, it } from 'vitest'
 import { como, fs, prepararEntorno } from './entorno.ts'
 
@@ -69,7 +69,14 @@ describe('retirar miembros', () => {
 })
 
 describe('[DoD-16] eliminar el servidor', () => {
-  const borrar = (quien: string) => deleteDoc(doc(fs(como(entorno(), quien)), 'servidores/A'))
+  // Borrar el servidor exige un batch que también crea la lápida `servidoresEliminados/A`.
+  const borrar = (quien: string) => {
+    const c = fs(como(entorno(), quien))
+    const lote = writeBatch(c)
+    lote.delete(doc(c, 'servidores/A'))
+    lote.set(doc(c, 'servidoresEliminados/A'), { eliminadoEn: serverTimestamp() })
+    return lote.commit()
+  }
 
   it('un miembro no lo borra', async () => {
     await assertFails(borrar('ana'))

@@ -118,7 +118,8 @@ service cloud.firestore {
       allow update: if gestor(sid)
         && soloCampos(['nombre', 'descripcion', 'privacidad', 'color', 'iniciales'])
         && servidorValido(request.resource.data);
-      allow delete: if propietario(sid);
+      // Borrar exige crear la lápida en el mismo batch, para que el id no se reutilice.
+      allow delete: if propietario(sid) && existsAfter(rutaLapida(sid));
 
       // ---------- miembros ----------
       function invitacionVigente(srv, codigo) {

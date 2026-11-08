@@ -1,5 +1,5 @@
 import { assertFails, assertSucceeds } from '@firebase/rules-unit-testing'
-import { deleteDoc, doc, serverTimestamp, setDoc } from 'firebase/firestore'
+import { deleteDoc, doc, serverTimestamp, setDoc, writeBatch } from 'firebase/firestore'
 import { getBytes, ref, uploadString } from 'firebase/storage'
 import { describe, it } from 'vitest'
 import { como, fs, prepararEntorno, st } from './entorno.ts'
@@ -32,7 +32,11 @@ describe('hacker: Storage', () => {
   })
 
   it('al borrar el servidor, ni el propietario lee el archivo huérfano', async () => {
-    await assertSucceeds(deleteDoc(doc(fs(como(entorno(), 'dueno')), 'servidores/A')))
+    const c = fs(como(entorno(), 'dueno'))
+    const lote = writeBatch(c)
+    lote.delete(doc(c, 'servidores/A'))
+    lote.set(doc(c, 'servidoresEliminados/A'), { eliminadoEn: serverTimestamp() })
+    await assertSucceeds(lote.commit())
     await assertFails(getBytes(ref(storage('dueno'), 'grabaciones/A/s1/r1.webm')))
     await assertFails(getBytes(ref(storage('ana'), 'grabaciones/A/s1/r1.webm')))
   })
