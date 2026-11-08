@@ -1,0 +1,56 @@
+{
+  "indexes": [
+    {
+      "collectionGroup": "mensajes",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        { "fieldPath": "servidorId", "order": "ASCENDING" },
+        { "fieldPath": "terminos", "arrayConfig": "CONTAINS" },
+        { "fieldPath": "creadoEn", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "segmentos",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        { "fieldPath": "servidorId", "order": "ASCENDING" },
+        { "fieldPath": "terminos", "arrayConfig": "CONTAINS" },
+        { "fieldPath": "marcaTiempo", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "mensajes",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "autorUid", "order": "ASCENDING" },
+        { "fieldPath": "creadoEn", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "sesiones",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "canalId", "order": "ASCENDING" },
+        { "fieldPath": "inicio", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "grabaciones",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        { "fieldPath": "servidorId", "order": "ASCENDING" },
+        { "fieldPath": "fecha", "order": "DESCENDING" }
+      ]
+    }
+  ],
+  "fieldOverrides": [
+    {
+      "collectionGroup": "miembros",
+      "fieldPath": "uid",
+      "indexes": [
+        { "order": "ASCENDING", "queryScope": "COLLECTION" },
+        { "order": "ASCENDING", "queryScope": "COLLECTION_GROUP" }
+      ]
+    }
+  ]
+}
