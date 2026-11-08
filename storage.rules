@@ -1,0 +1,37 @@
+rules_version = '2';
+
+// Reglas de Storage de TalkWith (TW 04): las grabaciones son objetos privados.
+// Nunca se usan enlaces públicos (`getDownloadURL`): se leen con `getBlob` y estas reglas.
+service firebase.storage {
+  match /b/{bucket}/o {
+    function rutaServidor(sid) {
+      return /databases/(default)/documents/servidores/$(sid);
+    }
+    function rutaMiembro(sid) {
+      return /databases/(default)/documents/servidores/$(sid)/miembros/$(request.auth.uid);
+    }
+    function miembro(sid) {
+      return request.auth != null
+        && firestore.exists(rutaServidor(sid))
+        && firestore.exists(rutaMiembro(sid));
+    }
+    function gestor(sid) {
+      return miembro(sid) && firestore.get(rutaMiembro(sid)).data.rol in ['propietario', 'admin'];
+    }
+    function consintio(sid, ses) {
+      return firestore.get(/databases/(default)/documents/servidores/$(sid)/sesiones/$(ses)/consentimientos/$(request.auth.uid)).data.estado == 'aceptado';
+    }
+
+    match /grabaciones/{sid}/{ses}/{archivo} {
+      allow read: if miembro(sid);
+      // `resource == null`: un archivo existente nunca se sobrescribe.
+      allow create: if resource == null
+        && miembro(sid)
+        && consintio(sid, ses)
+        && request.resource.contentType.matches('audio/.*')
+        && request.resource.size < 100 * 1024 * 1024;
+      allow update: if false;
+      allow delete: if gestor(sid);
+    }
+  }
+}

@@ -1,0 +1,307 @@
+rules_version = '2';
+
+// Reglas de Firestore de TalkWith (TW 04). Todo lo que no se permite expresamente queda denegado.
+// Límites conocidos (ver el PR): estas reglas no pueden verificar el consentimiento total de una
+// grabación, ni la exactitud de los contadores, ni borran en cascada al eliminar un servidor.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ---------- Ayudantes ----------
+    function autenticado() {
+      return request.auth != null;
+    }
+    function rutaServidor(sid) {
+      return /databases/$(database)/documents/servidores/$(sid);
+    }
+    function rutaMiembro(sid, uid) {
+      return /databases/$(database)/documents/servidores/$(sid)/miembros/$(uid);
+    }
+    // Miembro del servidor. Si el servidor se borra, sus datos huérfanos dejan de ser legibles.
+    function miembro(sid) {
+      return autenticado() && exists(rutaServidor(sid)) && exists(rutaMiembro(sid, request.auth.uid));
+    }
+    function rol(sid) {
+      return get(rutaMiembro(sid, request.auth.uid)).data.rol;
+    }
+    function gestor(sid) {
+      return miembro(sid) && rol(sid) in ['propietario', 'admin'];
+    }
+    function propietario(sid) {
+      return miembro(sid) && rol(sid) == 'propietario';
+    }
+    // Igual que gestor(), pero mirando el estado después del batch (crear servidor + canales + invitación).
+    function gestorDespues(sid) {
+      return autenticado()
+        && existsAfter(rutaServidor(sid))
+        && existsAfter(rutaMiembro(sid, request.auth.uid))
+        && getAfter(rutaMiembro(sid, request.auth.uid)).data.rol in ['propietario', 'admin'];
+    }
+    function soloCampos(lista) {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(lista);
+    }
+    function texto(valor, min, max) {
+      return valor is string && valor.size() >= min && valor.size() <= max;
+    }
+
+    // ---------- usuarios ----------
+    function perfilValido(d) {
+      return d.keys().hasOnly(['nombre', 'usuario', 'iniciales', 'color', 'fotoUrl', 'estado', 'estadoTexto', 'creadoEn', 'actualizadoEn'])
+        && d.keys().hasAll(['nombre', 'iniciales', 'color', 'estado', 'creadoEn', 'actualizadoEn'])
+        && texto(d.nombre, 1, 64)
+        && texto(d.iniciales, 1, 2)
+        && texto(d.color, 1, 20)
+        && d.estado in ['en-linea', 'ausente', 'desconectado']
+        && (!('usuario' in d) || (d.usuario is string && d.usuario.matches('^[a-z0-9.]{3,20}$')))
+        && (!('fotoUrl' in d) || texto(d.fotoUrl, 1, 2048))
+        && (!('estadoTexto' in d) || texto(d.estadoTexto, 0, 100))
+        && d.actualizadoEn == request.time;
+    }
+
+    match /usuarios/{uid} {
+      allow read: if autenticado();
+      allow create: if autenticado() && uid == request.auth.uid
+        && perfilValido(request.resource.data)
+        && !('usuario' in request.resource.data)
+        && request.resource.data.creadoEn == request.time;
+      allow update: if autenticado() && uid == request.auth.uid
+        && perfilValido(request.resource.data)
+        && request.resource.data.creadoEn == resource.data.creadoEn
+        && (request.resource.data.get('usuario', null) == resource.data.get('usuario', null)
+          || getAfter(/databases/$(database)/documents/nombresUsuario/$(request.resource.data.usuario)).data.uid == request.auth.uid);
+      allow delete: if false;
+    }
+
+    // Reserva única del nombre de usuario.
+    match /nombresUsuario/{handle} {
+      allow get: if autenticado();
+      allow create: if autenticado()
+        && handle.matches('^[a-z0-9.]{3,20}$')
+        && request.resource.data.keys().hasOnly(['uid'])
+        && request.resource.data.uid == request.auth.uid;
+      allow delete: if autenticado() && resource.data.uid == request.auth.uid;
+    }
+
+    // ---------- servidores ----------
+    function servidorValido(d) {
+      return d.keys().hasOnly(['nombre', 'descripcion', 'iniciales', 'color', 'propietarioUid', 'privacidad', 'creadoEn'])
+        && d.keys().hasAll(['nombre', 'descripcion', 'iniciales', 'color', 'propietarioUid', 'privacidad', 'creadoEn'])
+        && texto(d.nombre, 3, 50)
+        && texto(d.descripcion, 0, 200)
+        && texto(d.iniciales, 1, 2)
+        && texto(d.color, 1, 20)
+        && d.privacidad in ['invitacion', 'enlace'];
+    }
+
+    match /servidores/{sid} {
+      allow read: if miembro(sid);
+      allow create: if autenticado()
+        && servidorValido(request.resource.data)
+        && request.resource.data.propietarioUid == request.auth.uid
+        && request.resource.data.creadoEn == request.time;
+      allow update: if gestor(sid)
+        && soloCampos(['nombre', 'descripcion', 'privacidad', 'color', 'iniciales'])
+        && servidorValido(request.resource.data);
+      allow delete: if propietario(sid);
+
+      // ---------- miembros ----------
+      function invitacionVigente(srv, codigo) {
+        let inv = get(/databases/$(database)/documents/invitaciones/$(codigo)).data;
+        return inv.servidorId == srv && request.time < inv.expiraEn;
+      }
+      function unirse(srv, usr, d) {
+        return usr == request.auth.uid
+          && exists(rutaServidor(srv))
+          && d.keys().hasOnly(['uid', 'servidorId', 'rol', 'unidoEn', 'correo', 'codigoInvitacion'])
+          && d.keys().hasAll(['uid', 'servidorId', 'rol', 'unidoEn', 'correo', 'codigoInvitacion'])
+          && d.uid == usr
+          && d.servidorId == srv
+          && d.rol == 'miembro'
+          && d.unidoEn == request.time
+          && d.correo == request.auth.token.email
+          && d.codigoInvitacion is string
+          && invitacionVigente(srv, d.codigoInvitacion);
+      }
+      // El creador del servidor se agrega como propietario en el mismo batch que crea el servidor.
+      function arranquePropietario(srv, usr, d) {
+        return usr == request.auth.uid
+          && !exists(rutaServidor(srv))
+          && existsAfter(rutaServidor(srv))
+          && getAfter(rutaServidor(srv)).data.propietarioUid == request.auth.uid
+          && d.keys().hasOnly(['uid', 'servidorId', 'rol', 'unidoEn', 'correo'])
+          && d.keys().hasAll(['uid', 'servidorId', 'rol', 'unidoEn', 'correo'])
+          && d.uid == usr
+          && d.servidorId == srv
+          && d.rol == 'propietario'
+          && d.unidoEn == request.time
+          && d.correo == request.auth.token.email;
+      }
+
+      match /miembros/{uid} {
+        allow read: if miembro(sid) || (autenticado() && resource.data.uid == request.auth.uid);
+        allow create: if autenticado()
+          && (unirse(sid, uid, request.resource.data) || arranquePropietario(sid, uid, request.resource.data));
+        // Nadie cambia su propio rol: el propietario solo toca a otros y el admin solo el grupo.
+        allow update: if (propietario(sid)
+            && resource.data.rol != 'propietario'
+            && soloCampos(['rol', 'grupo'])
+            && request.resource.data.rol in ['admin', 'miembro'])
+          || (miembro(sid) && rol(sid) == 'admin'
+            && resource.data.rol != 'propietario'
+            && soloCampos(['grupo']));
+        allow delete: if (autenticado() && uid == request.auth.uid && miembro(sid) && resource.data.rol != 'propietario')
+          || (propietario(sid) && resource.data.rol != 'propietario')
+          || (miembro(sid) && rol(sid) == 'admin' && resource.data.rol == 'miembro');
+      }
+
+      // ---------- canales ----------
+      function canalValido(d, srv) {
+        return d.keys().hasOnly(['servidorId', 'nombre', 'tipo', 'descripcion', 'privado'])
+          && d.keys().hasAll(['servidorId', 'nombre', 'tipo'])
+          && d.servidorId == srv
+          && d.tipo in ['texto', 'voz']
+          && texto(d.nombre, 2, 30)
+          && (!('descripcion' in d) || texto(d.descripcion, 0, 120))
+          && (!('privado' in d) || d.privado is bool);
+      }
+
+      match /canales/{cid} {
+        allow read: if miembro(sid);
+        allow create: if gestorDespues(sid) && canalValido(request.resource.data, sid);
+        allow update: if gestor(sid) && canalValido(request.resource.data, sid);
+        allow delete: if gestor(sid);
+
+        // ---------- mensajes ----------
+        function mensajeValido(d, srv, can) {
+          return d.servidorId == srv
+            && d.canalId == can
+            && d.autorUid == request.auth.uid
+            && texto(d.contenido, 1, 4000)
+            && d.terminos is list && d.terminos.size() <= 50
+            && (!('menciones' in d) || (d.menciones is list && d.menciones.size() <= 50))
+            && (!('adjunto' in d) || d.adjunto is map);
+        }
+
+        match /mensajes/{mid} {
+          allow read: if miembro(sid);
+          allow create: if miembro(sid)
+            && exists(/databases/$(database)/documents/servidores/$(sid)/canales/$(cid))
+            && request.resource.data.keys().hasOnly(['servidorId', 'canalId', 'autorUid', 'contenido', 'creadoEn', 'adjunto', 'menciones', 'terminos'])
+            && request.resource.data.keys().hasAll(['servidorId', 'canalId', 'autorUid', 'contenido', 'creadoEn', 'terminos'])
+            && mensajeValido(request.resource.data, sid, cid)
+            && request.resource.data.creadoEn == request.time;
+          allow update: if miembro(sid)
+            && resource.data.autorUid == request.auth.uid
+            && soloCampos(['contenido', 'terminos', 'editadoEn'])
+            && mensajeValido(request.resource.data, sid, cid)
+            && request.resource.data.editadoEn == request.time;
+          allow delete: if miembro(sid) && (resource.data.autorUid == request.auth.uid || gestor(sid));
+        }
+      }
+
+      // ---------- sesiones de voz ----------
+      match /sesiones/{ses} {
+        allow read: if miembro(sid);
+        allow create: if miembro(sid)
+          && request.resource.data.keys().hasOnly(['servidorId', 'canalId', 'iniciadaPor', 'inicio', 'fin', 'duracion', 'participantes', 'totalSegmentos', 'grabacion'])
+          && request.resource.data.keys().hasAll(['servidorId', 'canalId', 'iniciadaPor', 'inicio', 'participantes', 'totalSegmentos', 'grabacion'])
+          && request.resource.data.servidorId == sid
+          && request.resource.data.iniciadaPor == request.auth.uid
+          && request.resource.data.participantes == [request.auth.uid]
+          && request.resource.data.inicio == request.time
+          && request.resource.data.totalSegmentos is int
+          && request.resource.data.grabacion in ['grabada', 'procesando', 'sin-grabacion'];
+        // En `participantes` solo puede cambiar el propio uid (entrar o salir de la llamada).
+        allow update: if miembro(sid)
+          && soloCampos(['participantes', 'fin', 'duracion', 'totalSegmentos', 'grabacion'])
+          && request.resource.data.participantes is list
+          && request.resource.data.participantes.toSet().difference(resource.data.participantes.toSet()).hasOnly([request.auth.uid])
+          && resource.data.participantes.toSet().difference(request.resource.data.participantes.toSet()).hasOnly([request.auth.uid])
+          && request.resource.data.grabacion in ['grabada', 'procesando', 'sin-grabacion'];
+        allow delete: if gestor(sid);
+
+        // ---------- segmentos de transcripción ----------
+        match /segmentos/{gid} {
+          allow read: if miembro(sid);
+          allow create: if miembro(sid)
+            && exists(/databases/$(database)/documents/servidores/$(sid)/sesiones/$(ses))
+            && request.resource.data.keys().hasOnly(['servidorId', 'sesionId', 'hablanteUid', 'texto', 'marcaTiempo', 'creadoEn', 'terminos'])
+            && request.resource.data.keys().hasAll(['servidorId', 'sesionId', 'hablanteUid', 'texto', 'marcaTiempo', 'creadoEn', 'terminos'])
+            && request.resource.data.hablanteUid == request.auth.uid
+            && request.resource.data.servidorId == sid
+            && request.resource.data.sesionId == ses
+            && texto(request.resource.data.texto, 1, 1000)
+            && (request.resource.data.marcaTiempo is string || request.resource.data.marcaTiempo is number)
+            && request.resource.data.terminos is list && request.resource.data.terminos.size() <= 50
+            && request.resource.data.creadoEn == request.time;
+          allow update: if false;
+          allow delete: if gestor(sid);
+        }
+
+        // ---------- consentimientos (el id del doc es el uid de quien consiente) ----------
+        match /consentimientos/{cuid} {
+          allow read: if miembro(sid);
+          allow create, update: if miembro(sid)
+            && cuid == request.auth.uid
+            && request.resource.data.keys().hasOnly(['uid', 'sesionId', 'estado', 'actualizadoEn'])
+            && request.resource.data.keys().hasAll(['uid', 'sesionId', 'estado', 'actualizadoEn'])
+            && request.resource.data.uid == request.auth.uid
+            && request.resource.data.sesionId == ses
+            && request.resource.data.estado in ['pendiente', 'aceptado', 'rechazado']
+            && request.resource.data.actualizadoEn == request.time;
+          allow delete: if false;
+        }
+
+        // ---------- metadatos de grabaciones (el archivo vive en Storage) ----------
+        match /grabaciones/{gid} {
+          allow read: if miembro(sid);
+          allow create: if miembro(sid)
+            && request.resource.data.keys().hasOnly(['servidorId', 'sesionId', 'titulo', 'canalNombre', 'fecha', 'duracion', 'creadorUid', 'tamano', 'ruta', 'estado', 'aceptaron', 'participantes'])
+            && request.resource.data.keys().hasAll(['servidorId', 'sesionId', 'titulo', 'canalNombre', 'fecha', 'duracion', 'creadorUid', 'tamano', 'ruta', 'estado', 'aceptaron', 'participantes'])
+            && request.resource.data.creadorUid == request.auth.uid
+            && request.resource.data.servidorId == sid
+            && request.resource.data.sesionId == ses
+            && request.resource.data.ruta is string
+            && request.resource.data.ruta.matches('^grabaciones/' + sid + '/' + ses + '/[^/]+$')
+            && get(/databases/$(database)/documents/servidores/$(sid)/sesiones/$(ses)/consentimientos/$(request.auth.uid)).data.estado == 'aceptado';
+          allow update: if miembro(sid)
+            && resource.data.creadorUid == request.auth.uid
+            && soloCampos(['estado', 'duracion', 'tamano']);
+          allow delete: if miembro(sid) && (resource.data.creadorUid == request.auth.uid || gestor(sid));
+        }
+      }
+    }
+
+    // ---------- Consultas collectionGroup (búsqueda, «mis servidores», biblioteca) ----------
+    // Cada documento lleva `servidorId`, así la regla comprueba la membresía de su servidor.
+    match /{path=**}/miembros/{uid} {
+      allow read: if autenticado() && resource.data.uid == request.auth.uid;
+    }
+    match /{path=**}/mensajes/{mid} {
+      allow read: if miembro(resource.data.servidorId);
+    }
+    match /{path=**}/segmentos/{gid} {
+      allow read: if miembro(resource.data.servidorId);
+    }
+    match /{path=**}/grabaciones/{gid} {
+      allow read: if miembro(resource.data.servidorId);
+    }
+
+    // ---------- invitaciones ----------
+    match /invitaciones/{codigo} {
+      // Se puede leer una invitación si se conoce el código, pero no listarlas.
+      allow get: if autenticado();
+      allow list: if false;
+      allow create: if autenticado()
+        && codigo.matches('^[a-z0-9-]{12,64}$')
+        && request.resource.data.keys().hasOnly(['servidorId', 'invitaUid', 'creadaEn', 'expiraEn', 'servidorNombre', 'servidorIniciales', 'servidorColor'])
+        && request.resource.data.keys().hasAll(['servidorId', 'invitaUid', 'creadaEn', 'expiraEn', 'servidorNombre', 'servidorIniciales', 'servidorColor'])
+        && gestorDespues(request.resource.data.servidorId)
+        && request.resource.data.invitaUid == request.auth.uid
+        && request.resource.data.creadaEn == request.time
+        && request.resource.data.expiraEn is timestamp
+        && request.resource.data.expiraEn > request.time;
+      allow update: if false;
+      allow delete: if gestor(resource.data.servidorId);
+    }
+  }
+}
