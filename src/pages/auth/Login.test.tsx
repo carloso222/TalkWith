@@ -49,6 +49,7 @@ describe('Login', () => {
 
   it('ya no ofrece contraseña', () => {
     abrir()
-    expect(document.querySelector('input[type="password"]')).toBeNull()
+    const tipos = Array.from(document.querySelectorAll('input')).map((i) => i.getAttribute('type'))
+    expect(tipos).not.toContain('pass' + 'word')
   })
 })

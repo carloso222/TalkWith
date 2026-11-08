@@ -56,4 +56,14 @@ describe('iniciarEscuchaSesion', () => {
     expect(srv.cerrarSesion).toHaveBeenCalledTimes(1)
     expect(useUiStore.getState().toasts.some((t) => t.tipo === 'error')).toBe(true)
   })
+
+  it('un null que llega con el perfil en vuelo gana sobre el resultado tardío', async () => {
+    let resolver!: (v: unknown) => void
+    srv.asegurarPerfil.mockReturnValue(new Promise((r) => { resolver = r }))
+    const p = srv.oyente!({ uid: 'u1' } as User)
+    await srv.oyente!(null)
+    resolver({ usuario: ana, perfilCompleto: true })
+    await p
+    expect(useAuthStore.getState().estado).toBe('anonimo')
+  })
 })

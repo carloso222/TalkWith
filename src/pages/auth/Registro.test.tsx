@@ -29,7 +29,7 @@ describe('Registro', () => {
     await userEvent.clear(screen.getByLabelText('Nombre de usuario'))
     await userEvent.type(screen.getByLabelText('Nombre de usuario'), 'ana.perez')
     await userEvent.click(screen.getByRole('checkbox', { name: /términos de uso/i }))
-    await userEvent.click(screen.getByRole('checkbox', { name: /transcribirse/i }))
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Entiendo que las llamadas pueden transcribirse y que una grabación solo inicia con el consentimiento de todos.' }))
     await userEvent.click(screen.getByRole('button', { name: /crear mi cuenta/i }))
 
     expect(await screen.findByText('Ese nombre de usuario ya está en uso.')).toBeInTheDocument()

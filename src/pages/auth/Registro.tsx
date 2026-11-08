@@ -128,7 +128,7 @@ export default function Registro() {
               Acepto los <a href="#" className="text-fg underline">Términos de uso</a> y el <a href="#" className="text-fg underline">Aviso de privacidad</a> de TalkWith.
             </Checkbox>
             <Checkbox checked={grabacion} onChange={setGrabacion}>
-              Entiendo que las llamadas pueden transcribirse y que una 
+              Entiendo que las llamadas pueden transcribirse y que una grabación solo inicia con el consentimiento de todos.
             </Checkbox>
             {tocado.casillas && errores.casillas && <p className="text-caption text-recording">{errores.casillas}</p>}
           </div>

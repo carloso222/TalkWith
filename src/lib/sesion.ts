@@ -17,15 +17,19 @@ export function limpiarEstadoLocal(): void {
 
 /** Une Firebase Auth con los stores. Se llama una sola vez desde `main.tsx`. */
 export function iniciarEscuchaSesion(): Unsubscribe {
+  let version = 0
   return escucharSesion(async (user) => {
+    const miVersion = ++version
     if (!user) {
       limpiarEstadoLocal()
       return
     }
     try {
       const { usuario, perfilCompleto } = await asegurarPerfil(user)
+      if (miVersion !== version) return
       useAuthStore.getState().setSesion(usuario, perfilCompleto)
     } catch (error) {
+      if (miVersion !== version) return
       console.error(error)
       useUiStore.getState().notify('error', 'No pudimos cargar tu perfil', 'Cerramos tu sesión. Intenta entrar de nuevo.')
       await cerrarSesion()
