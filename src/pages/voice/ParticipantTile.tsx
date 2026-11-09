@@ -12,6 +12,8 @@ interface Props {
   subtitulo?: string
   /** Perdio la conexion y el servidor le guarda el lugar. */
   reconectando?: boolean
+  /** El audio con esta persona todavia no conecta. */
+  senalDebil?: boolean
 }
 
 /** Parte un subtítulo largo en dos tonos: lo reciente arriba, lo anterior atenuado (Figma 12). */
@@ -23,11 +25,11 @@ function partirSubtitulo(texto: string): [string, string] {
 }
 
 /** Tarjeta de una persona en la llamada: avatar grande, señal, subtítulo y estado. */
-export default function ParticipantTile({ uid, esYo, silenciado, hablando, seleccionado, subtitulo, reconectando }: Props) {
+export default function ParticipantTile({ uid, esYo, silenciado, hablando, seleccionado, subtitulo, reconectando, senalDebil }: Props) {
   const usuario = userService.find(uid)
   if (!usuario) return null
 
-  const senal = reconectando ? 'media' : 'buena'
+  const senal = reconectando || senalDebil ? 'media' : 'buena'
   const Senal = senal === 'buena' ? SignalHigh : SignalMedium
   const [principal, anterior] = subtitulo ? partirSubtitulo(subtitulo) : ['', '']
 

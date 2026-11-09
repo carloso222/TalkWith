@@ -68,7 +68,10 @@ export interface Mensaje {
   canalId: string
   autorUid: string
   contenido: string
+  /** Hora para mostrar, p. ej. "16:20". */
   creadoEn: string
+  /** Momento exacto en milisegundos (ordena el historial y separa por día). */
+  creadoMs?: number
   adjunto?: Adjunto
   /** UIDs mencionados con @ dentro del contenido. */
   menciones?: string[]
@@ -92,6 +95,8 @@ export interface ParticipanteLlamada {
   hablando: boolean
   /** Perdió la conexión y el servidor le guarda el lugar unos segundos. */
   reconectando: boolean
+  /** Cambia cada vez que la persona entra a la sala; sirve para rehacer el audio (WebRTC). */
+  conexion: number
 }
 
 export interface Segmento {

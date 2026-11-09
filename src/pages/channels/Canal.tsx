@@ -8,5 +8,6 @@ export default function Canal() {
   const { serverId, channelId = '' } = useParams()
   const canal = channelService.find(channelId)
   if (!canal || canal.servidorId !== serverId) return <Navigate to="/404" replace />
-  return canal.tipo === 'voz' ? <CanalVoz canal={canal} /> : <CanalTexto canal={canal} />
+  // la key reinicia la vista al cambiar de canal
+  return canal.tipo === 'voz' ? <CanalVoz key={canal.canalId} canal={canal} /> : <CanalTexto key={canal.canalId} canal={canal} />
 }

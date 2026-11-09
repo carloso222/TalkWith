@@ -12,6 +12,21 @@ const verificarToken = async (token) => {
 // "intruso" no es miembro de nada y "texto" no es canal de voz
 const puedeVerServidor = async (uid) => uid !== 'intruso'
 const puedeEntrarCanal = async (uid, servidorId, canalId) => uid !== 'intruso' && canalId !== 'texto'
+// y solo se escribe en canales de texto
+const puedeEscribirCanal = async (uid, servidorId, canalId) => uid !== 'intruso' && canalId.startsWith('texto')
+
+// mensajes guardados por el servidor falso (la hora avanza de uno en uno para ver el orden)
+let guardados = []
+let reloj = 1000
+const mensajes = {
+  guardar: async (m) => {
+    guardados.push(m)
+    return { mensajeId: `m${guardados.length}`, creadoMs: ++reloj }
+  },
+}
+
+// participante sin el numero de conexion, que cambia en cada prueba
+const sinConexion = ({ conexion: _conexion, ...resto }) => resto
 
 let llamadas
 let contador = 0
@@ -60,7 +75,9 @@ before(async () => {
     verificarToken,
     puedeVerServidor,
     puedeEntrarCanal,
+    puedeEscribirCanal,
     sesiones,
+    mensajes,
     esperaReconexion: 150,
     esperaCerrarSesion: 100,
   })
@@ -70,6 +87,7 @@ before(async () => {
 
 beforeEach(() => {
   llamadas = []
+  guardados = []
   while (abiertos.length) abiertos.pop().disconnect()
 })
 
@@ -106,7 +124,8 @@ describe('salas de voz', () => {
     const r = await pedir(ana, 'sala:unirse', { servidorId: 's1', canalId: 'voz-a' })
     assert.equal(r.ok, true)
     assert.match(r.sesionId, /^sesion-/)
-    assert.deepEqual(r.participantes, [{ uid: 'ana', silenciado: false, hablando: false, reconectando: false }])
+    assert.deepEqual(r.participantes.map(sinConexion), [{ uid: 'ana', silenciado: false, hablando: false, reconectando: false }])
+    assert.equal(r.participantes[0].conexion, r.conexion)
     assert.deepEqual(llamadas.filter((l) => l[0] === 'crear'), [['crear', 's1', 'voz-a', 'ana']])
   })
 
@@ -143,7 +162,7 @@ describe('salas de voz', () => {
     ana.emit('sala:estado', { silenciado: true, hablando: true })
     const ana2 = (await aviso).participantes.find((p) => p.uid === 'ana')
     // silenciado nunca cuenta como hablando
-    assert.deepEqual(ana2, { uid: 'ana', silenciado: true, hablando: false, reconectando: false })
+    assert.deepEqual(sinConexion(ana2), { uid: 'ana', silenciado: true, hablando: false, reconectando: false })
   })
 
   test('salir avisa a los demas y la sesion se cierra cuando la sala queda vacia', async () => {
@@ -187,8 +206,11 @@ describe('reconexion', () => {
 
     const beto2 = cliente('ok-beto')
     await conectado(beto2)
+    const antes = servidor.salas.get('s1/voz-g').personas.get('beto').conexion
     const r = await pedir(beto2, 'sala:unirse', { servidorId: 's1', canalId: 'voz-g' })
-    assert.deepEqual(r.participantes.find((p) => p.uid === 'beto'), { uid: 'beto', silenciado: false, hablando: false, reconectando: false })
+    assert.deepEqual(sinConexion(r.participantes.find((p) => p.uid === 'beto')), { uid: 'beto', silenciado: false, hablando: false, reconectando: false })
+    // al volver cambia su conexion para que los demas rehagan el audio
+    assert.notEqual(r.conexion, antes)
     await esperar(200)
     assert.equal(servidor.salas.get('s1/voz-g').personas.has('beto'), true)
   })
@@ -221,6 +243,111 @@ describe('llamadas del servidor', () => {
     const intruso = cliente('ok-intruso')
     await conectado(intruso)
     assert.deepEqual(await pedir(intruso, 'servidor:ver', { servidorId: 's2' }), { ok: false, error: 'sin-permiso' })
+  })
+})
+
+describe('senalizacion webrtc (TW 13)', () => {
+  test('pasa la oferta solo a la persona indicada de la misma sala', async () => {
+    const ana = cliente('ok-ana')
+    const beto = cliente('ok-beto')
+    const caro = cliente('ok-caro')
+    await Promise.all([conectado(ana), conectado(beto), conectado(caro)])
+    const ra = await pedir(ana, 'sala:unirse', { servidorId: 's1', canalId: 'voz-r' })
+    await pedir(beto, 'sala:unirse', { servidorId: 's1', canalId: 'voz-r' })
+    await pedir(caro, 'sala:unirse', { servidorId: 's1', canalId: 'voz-r' })
+
+    let caroRecibio = false
+    caro.on('rtc:senal', () => (caroRecibio = true))
+    const llega = siguiente(beto, 'rtc:senal')
+    ana.emit('rtc:senal', { para: 'beto', datos: { tipo: 'oferta', sdp: { type: 'offer', sdp: 'v=0' } } })
+    assert.deepEqual(await llega, { de: 'ana', conexion: ra.conexion, datos: { tipo: 'oferta', sdp: { type: 'offer', sdp: 'v=0' } } })
+    await esperar(30)
+    assert.equal(caroRecibio, false)
+  })
+
+  test('no pasa senales a otra sala, a uno mismo, de tipo raro o muy grandes', async () => {
+    const ana = cliente('ok-ana')
+    const beto = cliente('ok-beto')
+    await Promise.all([conectado(ana), conectado(beto)])
+    await pedir(ana, 'sala:unirse', { servidorId: 's1', canalId: 'voz-s' })
+    await pedir(beto, 'sala:unirse', { servidorId: 's1', canalId: 'voz-t' })
+    let recibidas = 0
+    beto.on('rtc:senal', () => recibidas++)
+    ana.on('rtc:senal', () => recibidas++)
+    ana.emit('rtc:senal', { para: 'beto', datos: { tipo: 'oferta', sdp: {} } })
+    ana.emit('rtc:senal', { para: 'ana', datos: { tipo: 'oferta', sdp: {} } })
+    await pedir(beto, 'sala:unirse', { servidorId: 's1', canalId: 'voz-s' })
+    ana.emit('rtc:senal', { para: 'beto', datos: { tipo: 'virus' } })
+    ana.emit('rtc:senal', { para: 'beto', datos: { tipo: 'candidato', candidato: 'x'.repeat(30000) } })
+    await esperar(50)
+    assert.equal(recibidas, 0)
+  })
+})
+
+describe('mensajes de texto (TW 09)', () => {
+  test('dos clientes reciben el mensaje y se guarda una vez', async () => {
+    const ana = cliente('ok-ana')
+    const beto = cliente('ok-beto')
+    await Promise.all([conectado(ana), conectado(beto)])
+    assert.deepEqual(await pedir(ana, 'canal:entrar', { servidorId: 's1', canalId: 'texto-a' }), { ok: true })
+    await pedir(beto, 'canal:entrar', { servidorId: 's1', canalId: 'texto-a' })
+
+    const llegaAna = siguiente(ana, 'mensaje:nuevo')
+    const llegaBeto = siguiente(beto, 'mensaje:nuevo')
+    const r = await pedir(ana, 'mensaje:enviar', { servidorId: 's1', canalId: 'texto-a', contenido: '  hola equipo  ' })
+    assert.equal(r.ok, true)
+    const esperado = { mensajeId: 'm1', servidorId: 's1', canalId: 'texto-a', autorUid: 'ana', contenido: 'hola equipo', creadoMs: r.mensaje.creadoMs }
+    assert.deepEqual(r.mensaje, esperado)
+    assert.deepEqual(await llegaAna, esperado)
+    assert.deepEqual(await llegaBeto, esperado)
+    assert.deepEqual(guardados, [{ servidorId: 's1', canalId: 'texto-a', autorUid: 'ana', contenido: 'hola equipo' }])
+  })
+
+  test('los mensajes llegan en el orden en que se mandaron', async () => {
+    const ana = cliente('ok-ana')
+    const beto = cliente('ok-beto')
+    await Promise.all([conectado(ana), conectado(beto)])
+    await pedir(beto, 'canal:entrar', { servidorId: 's1', canalId: 'texto-b' })
+    const recibidos = []
+    beto.on('mensaje:nuevo', (m) => recibidos.push(m))
+    for (const contenido of ['uno', 'dos', 'tres']) await pedir(ana, 'mensaje:enviar', { servidorId: 's1', canalId: 'texto-b', contenido })
+    await esperar(30)
+    assert.deepEqual(recibidos.map((m) => m.contenido), ['uno', 'dos', 'tres'])
+    assert.ok(recibidos[0].creadoMs < recibidos[1].creadoMs && recibidos[1].creadoMs < recibidos[2].creadoMs)
+  })
+
+  test('solo llega a quien esta en ese canal', async () => {
+    const ana = cliente('ok-ana')
+    const beto = cliente('ok-beto')
+    await Promise.all([conectado(ana), conectado(beto)])
+    await pedir(beto, 'canal:entrar', { servidorId: 's1', canalId: 'texto-otro' })
+    let llego = false
+    beto.on('mensaje:nuevo', () => (llego = true))
+    await pedir(ana, 'mensaje:enviar', { servidorId: 's1', canalId: 'texto-c', contenido: 'hola' })
+    await esperar(30)
+    assert.equal(llego, false)
+  })
+
+  test('rechaza mensajes vacios, muy largos, sin permiso o en canales de voz', async () => {
+    const ana = cliente('ok-ana')
+    const intruso = cliente('ok-intruso')
+    await Promise.all([conectado(ana), conectado(intruso)])
+    const enviar = (s, datos) => pedir(s, 'mensaje:enviar', { servidorId: 's1', canalId: 'texto-d', ...datos })
+    assert.deepEqual(await enviar(ana, { contenido: '   ' }), { ok: false, error: 'mensaje-invalido' })
+    assert.deepEqual(await enviar(ana, { contenido: 'x'.repeat(4001) }), { ok: false, error: 'mensaje-invalido' })
+    assert.deepEqual(await enviar(intruso, { contenido: 'hola' }), { ok: false, error: 'sin-permiso' })
+    assert.deepEqual(await enviar(ana, { canalId: 'voz-a', contenido: 'hola' }), { ok: false, error: 'sin-permiso' })
+    assert.deepEqual(await pedir(intruso, 'canal:entrar', { servidorId: 's1', canalId: 'texto-d' }), { ok: false, error: 'sin-permiso' })
+    assert.equal(guardados.length, 0)
+  })
+
+  test('frena a quien manda demasiados mensajes seguidos', async () => {
+    const ana = cliente('ok-ana')
+    await conectado(ana)
+    const respuestas = []
+    for (let i = 0; i < 12; i++) respuestas.push(await pedir(ana, 'mensaje:enviar', { servidorId: 's1', canalId: 'texto-e', contenido: `m${i}` }))
+    assert.equal(respuestas.filter((r) => r.ok).length, 10)
+    assert.deepEqual(respuestas.at(-1), { ok: false, error: 'muy-rapido' })
   })
 })
 

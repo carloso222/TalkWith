@@ -1,33 +1,34 @@
-import { Copy, Download, FileText, Hash, Link2, MoreHorizontal, Paperclip, Pencil, RefreshCw, Reply, Search, SendHorizontal, Smile, Trash2, Users, WifiOff } from 'lucide-react'
-import { Fragment, useCallback, useRef, useState, type FormEvent, type ReactNode } from 'react'
+import { Copy, Download, FileText, Hash, Link2, Paperclip, Pencil, RefreshCw, Reply, Search, SendHorizontal, Smile, Trash2, Users, WifiOff } from 'lucide-react'
+import { Fragment, useRef, useState, type FormEvent, type ReactNode } from 'react'
 import { useNavigate } from 'react-router'
 import Avatar from '../../components/ui/Avatar'
 import { useAutoScroll } from '../../hooks/useAutoScroll'
-import { useClickOutside } from '../../hooks/useClickOutside'
+import { useCanalTexto, type MensajeVista } from '../../hooks/useCanalTexto'
 import { useDocumentTitle } from '../../hooks/useDocumentTitle'
-import { useService } from '../../hooks/useService'
 import { cn } from '../../lib/cn'
 import { rutas } from '../../lib/routes'
-import { channelService, messageService, userService } from '../../services'
+import { diaMensaje } from '../../lib/time'
+import { channelService, userService } from '../../services'
 import { useAuthStore } from '../../store/authStore'
 import { useUiStore } from '../../store/uiStore'
 import type { Canal, Mensaje } from '../../types'
 import ColumnaMiembros from './ColumnaMiembros'
 
-/** Figma 10 · Canal de texto y 11 · Reconectando. Responsable: Isaian. */
+// fecha de calendario de un mensaje, para separar por dia
+const diaDe = (m: Mensaje) => (m.creadoMs ? new Date(m.creadoMs).toDateString() : '')
+
+/** Figma 10 · Canal de texto y 11 · Reconectando. Responsable: Isaian. Mensajes reales por socket.io (TW 09). */
 export default function CanalTexto({ canal }: { canal: Canal }) {
   useDocumentTitle(`#${canal.nombre}`)
   const navigate = useNavigate()
   const usuario = useAuthStore((s) => s.usuario)
   const notify = useUiStore((s) => s.notify)
 
-  const { data, loading } = useService(() => messageService.getByChannel(canal.canalId), [canal.canalId])
-  // Mensajes enviados en esta sesión, por canal: solo viven en memoria, no se mandan a ningún servidor.
-  const [enviados, setEnviados] = useState<Record<string, Mensaje[]>>({})
-  const mensajes = [...(data ?? []), ...(enviados[canal.canalId] ?? [])]
+  const chat = useCanalTexto(canal.servidorId, canal.canalId, usuario?.uid ?? '')
+  const mensajes = chat.mensajes
+  const reconectando = chat.estado === 'reconectando'
 
   const [verMiembros, setVerMiembros] = useState(true)
-  const [reconectando, setReconectando] = useState(false)
   const [texto, setTexto] = useState('')
   const entrada = useRef<HTMLInputElement>(null)
   const lista = useAutoScroll<HTMLDivElement>(mensajes.length)
@@ -39,24 +40,9 @@ export default function CanalTexto({ canal }: { canal: Canal }) {
     e.preventDefault()
     const contenido = texto.trim()
     if (!contenido || !usuario) return
-    const ahora = new Date()
-    setEnviados((porCanal) => ({
-      ...porCanal,
-      [canal.canalId]: [
-        ...(porCanal[canal.canalId] ?? []),
-        { mensajeId: crypto.randomUUID(), canalId: canal.canalId, autorUid: usuario.uid, contenido, creadoEn: `${ahora.getHours()}:${String(ahora.getMinutes()).padStart(2, '0')}` },
-      ],
-    }))
+    chat.enviar(contenido)
     setTexto('')
-    if (reconectando) notify('info', 'Mensaje en espera', 'Se enviará en cuanto vuelva la conexión.')
-  }
-
-  const reintentar = () => {
-    notify('info', 'Reconectando…')
-    setTimeout(() => {
-      setReconectando(false)
-      notify('exito', 'Conexión restablecida', 'Ya estás al día con los mensajes de #' + canal.nombre + '.')
-    }, 1200)
+    if (chat.estado !== 'conectado') notify('info', 'Mensaje en espera', 'Se enviará en cuanto vuelva la conexión.')
   }
 
   const responder = (m: Mensaje) => {
@@ -84,7 +70,6 @@ export default function CanalTexto({ canal }: { canal: Canal }) {
             >
               <Users className="size-5" />
             </button>
-            <MenuCanal onSimular={() => setReconectando(true)} reconectando={reconectando} />
           </div>
         </header>
 
@@ -92,15 +77,23 @@ export default function CanalTexto({ canal }: { canal: Canal }) {
           <div role="status" className="flex shrink-0 items-center gap-3 border-b border-warning/40 bg-warning/10 px-5 py-2.5 text-small text-warning">
             <RefreshCw className="size-[18px] shrink-0 animate-spin [animation-duration:2.5s]" />
             <p className="flex-1">Intentando reconectar. Los mensajes nuevos aparecerán cuando vuelva la conexión.</p>
-            <button onClick={reintentar} className="h-8 shrink-0 rounded-lg border border-warning/50 px-3 font-medium hover:bg-warning/10">
+          </div>
+        )}
+        {chat.estado === 'error' && (
+          <div role="alert" className="flex shrink-0 items-center gap-3 border-b border-recording/40 bg-recording/10 px-5 py-2.5 text-small text-recording">
+            <WifiOff className="size-[18px] shrink-0" />
+            <p className="flex-1">{chat.error} Los mensajes nuevos no llegarán hasta que se conecte.</p>
+            <button onClick={chat.reintentar} className="h-8 shrink-0 rounded-lg border border-recording/50 px-3 font-medium hover:bg-recording/10">
               Reintentar ahora
             </button>
           </div>
         )}
 
         <div ref={lista} className="min-h-0 flex-1 overflow-y-auto pt-10 pb-2">
-          {loading ? (
+          {chat.cargando ? (
             <CargandoMensajes />
+          ) : chat.errorCarga && mensajes.length === 0 ? (
+            <p className="px-5 pt-20 text-center text-muted">No pudimos cargar los mensajes. {chat.errorCarga}</p>
           ) : mensajes.length === 0 ? (
             <div className="flex flex-col gap-2 px-5 pt-20">
               <span className="flex size-14 items-center justify-center rounded-full bg-raised"><Hash className="size-7" /></span>
@@ -108,14 +101,21 @@ export default function CanalTexto({ canal }: { canal: Canal }) {
               <p className="text-muted">Este es el inicio del canal. {canal.descripcion}</p>
             </div>
           ) : (
-            <>
-              <div className="mx-5 mb-4 flex items-center gap-4 text-caption font-medium text-muted">
-                <span className="h-px flex-1 bg-line" /> Hoy, 1 de octubre <span className="h-px flex-1 bg-line" />
-              </div>
-              {mensajes.map((m, i) => (
-                <FilaMensaje key={m.mensajeId} mensaje={m} continua={mensajes[i - 1]?.autorUid === m.autorUid} miUid={usuario?.uid} onResponder={responder} />
-              ))}
-            </>
+            mensajes.map((m, i) => {
+              const anterior = mensajes[i - 1]
+              // separador cuando cambia el dia
+              const nuevoDia = !anterior || diaDe(anterior) !== diaDe(m)
+              return (
+                <Fragment key={m.mensajeId}>
+                  {nuevoDia && Boolean(m.creadoMs) && (
+                    <div className="mx-5 mt-4 mb-4 flex items-center gap-4 text-caption font-medium text-muted">
+                      <span className="h-px flex-1 bg-line" /> {diaMensaje(new Date(m.creadoMs ?? 0))} <span className="h-px flex-1 bg-line" />
+                    </div>
+                  )}
+                  <FilaMensaje mensaje={m} continua={!nuevoDia && anterior?.autorUid === m.autorUid} miUid={usuario?.uid} onResponder={responder} />
+                </Fragment>
+              )
+            })
           )}
         </div>
 
@@ -160,7 +160,7 @@ export default function CanalTexto({ canal }: { canal: Canal }) {
 }
 
 /** Un mensaje del canal. `continua` = mismo autor que el anterior (sin avatar ni nombre). */
-function FilaMensaje({ mensaje: m, continua, miUid, onResponder }: { mensaje: Mensaje; continua: boolean; miUid?: string; onResponder: (m: Mensaje) => void }) {
+function FilaMensaje({ mensaje: m, continua, miUid, onResponder }: { mensaje: MensajeVista; continua: boolean; miUid?: string; onResponder: (m: Mensaje) => void }) {
   const autor = userService.find(m.autorUid)
   const notify = useUiStore((s) => s.notify)
   const confirm = useUiStore((s) => s.confirm)
@@ -187,7 +187,7 @@ function FilaMensaje({ mensaje: m, continua, miUid, onResponder }: { mensaje: Me
   }
 
   return (
-    <article className={cn('group relative flex gap-3.5 px-5 py-1', !continua && 'mt-3', meMencionan ? 'bg-primary/10 hover:bg-primary/15' : 'hover:bg-raised/40')}>
+    <article className={cn('group relative flex gap-3.5 px-5 py-1', !continua && 'mt-3', meMencionan ? 'bg-primary/10 hover:bg-primary/15' : 'hover:bg-raised/40', m.enviando && 'opacity-60')}>
       <div className="w-10 shrink-0">{!continua && <Avatar uid={m.autorUid} />}</div>
       <div className="flex min-w-0 flex-1 flex-col gap-1">
         {!continua && (
@@ -198,6 +198,7 @@ function FilaMensaje({ mensaje: m, continua, miUid, onResponder }: { mensaje: Me
         )}
         <p className="text-body break-words">
           <ContenidoConMenciones texto={m.contenido} />
+          {m.enviando && <span className="ml-2 text-caption text-muted">Enviando…</span>}
         </p>
         {m.adjunto?.tipo === 'archivo' && (
           <div className="mt-1.5 mb-1 flex max-w-[380px] items-center gap-3 rounded-xl border border-line bg-panel p-3">
@@ -251,34 +252,6 @@ function ContenidoConMenciones({ texto }: { texto: string }) {
         ),
       )}
     </>
-  )
-}
-
-/** Menú "…" del encabezado: permite simular la pérdida de conexión (Figma 11). */
-function MenuCanal({ onSimular, reconectando }: { onSimular: () => void; reconectando: boolean }) {
-  const [abierto, setAbierto] = useState(false)
-  const cerrar = useCallback(() => setAbierto(false), [])
-  const ref = useClickOutside<HTMLDivElement>(cerrar, abierto)
-  return (
-    <div ref={ref} className="relative">
-      <button onClick={() => setAbierto((v) => !v)} aria-expanded={abierto} className="rounded-lg p-2 hover:bg-raised hover:text-fg" aria-label="Más opciones">
-        <MoreHorizontal className="size-5" />
-      </button>
-      {abierto && (
-        <div className="animate-dialog-in absolute top-11 right-0 z-30 w-60 rounded-xl border border-line bg-panel p-1.5 text-fg shadow-high">
-          <button
-            disabled={reconectando}
-            onClick={() => {
-              onSimular()
-              cerrar()
-            }}
-            className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-small hover:bg-raised disabled:opacity-50"
-          >
-            <WifiOff className="size-4 text-warning" /> Simular pérdida de conexión
-          </button>
-        </div>
-      )}
-    </div>
   )
 }
 

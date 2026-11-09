@@ -7,6 +7,15 @@ const ESPERA_RECONEXION_MS = 15000
 // tiempo que la sesion sigue abierta cuando la sala se queda vacia
 const ESPERA_CERRAR_SESION_MS = 10000
 
+// largo maximo de un mensaje (igual que las reglas de firestore)
+const MAX_MENSAJE = 4000
+// cuantos mensajes puede mandar alguien en la ventana de tiempo
+const MAX_MENSAJES_SEGUIDOS = 10
+const VENTANA_MENSAJES_MS = 10000
+// tamano maximo de una senal de webrtc (oferta, respuesta o candidato)
+const MAX_SENAL = 20000
+const TIPOS_SENAL = ['oferta', 'respuesta', 'candidato']
+
 // ids de firestore que aceptamos (letras, numeros, guion y guion bajo)
 const esId = (valor) => typeof valor === 'string' && /^[A-Za-z0-9_-]{1,100}$/.test(valor)
 
@@ -21,7 +30,9 @@ export function crearServidor({
   verificarToken,
   puedeVerServidor,
   puedeEntrarCanal,
+  puedeEscribirCanal,
   sesiones,
+  mensajes,
   esperaReconexion = ESPERA_RECONEXION_MS,
   esperaCerrarSesion = ESPERA_CERRAR_SESION_MS,
 }) {
@@ -35,6 +46,8 @@ export function crearServidor({
 
   // salas abiertas, la clave es "servidorId/canalId"
   const salas = new Map()
+  // cambia cada vez que alguien entra a una sala, asi los demas saben que hay que rehacer el audio
+  let contadorConexiones = 0
 
   // solo dejamos conectarse a quien manda un token de firebase valido
   io.use(async (socket, next) => {
@@ -54,6 +67,7 @@ export function crearServidor({
       silenciado: p.silenciado,
       hablando: p.hablando,
       reconectando: p.sockets.size === 0,
+      conexion: p.conexion,
     }))
   }
 
@@ -137,6 +151,8 @@ export function crearServidor({
       // si venia de una reconexion ya no lo sacamos
       clearTimeout(persona.temporizador)
       persona.sockets.add(socket.id)
+      persona.ultimoSocket = socket.id
+      persona.conexion = ++contadorConexiones
       socket.data.sala = clave
       socket.join(clave)
 
@@ -153,7 +169,7 @@ export function crearServidor({
       }
       await sala.creando
 
-      responder({ ok: true, sesionId: sala.sesionId, inicio: sala.inicio, participantes: participantesDe(sala) })
+      responder({ ok: true, sesionId: sala.sesionId, inicio: sala.inicio, conexion: persona.conexion, participantes: participantesDe(sala) })
       avisar(sala)
     })
 
@@ -175,6 +191,82 @@ export function crearServidor({
       persona.silenciado = silenciado
       persona.hablando = hablando
       avisar(sala)
+    })
+
+    // webrtc: el servidor solo pasa la senal a la otra persona de la misma sala (TW 13)
+    socket.on('rtc:senal', (datos) => {
+      const sala = salas.get(socket.data.sala)
+      const yo = sala?.personas.get(uid)
+      const otro = sala?.personas.get(datos?.para)
+      if (!yo || !otro || datos.para === uid) return
+      const senal = datos.datos
+      if (!TIPOS_SENAL.includes(senal?.tipo)) return
+      if (JSON.stringify(senal).length > MAX_SENAL) return
+      // se manda a la pestana con la que entro mas recientemente
+      if (!otro.sockets.has(otro.ultimoSocket)) return
+      io.to(otro.ultimoSocket).emit('rtc:senal', { de: uid, conexion: yo.conexion, datos: senal })
+    })
+
+    // ---------- canales de texto (TW 09) ----------
+
+    // revisa una sola vez por socket que pueda escribir en el canal
+    async function permisoTexto(servidorId, canalId) {
+      const clave = `${servidorId}/${canalId}`
+      if (!socket.data.canalesTexto) socket.data.canalesTexto = new Set()
+      if (socket.data.canalesTexto.has(clave)) return true
+      const permitido = await puedeEscribirCanal(uid, servidorId, canalId)
+      if (permitido) socket.data.canalesTexto.add(clave)
+      return permitido
+    }
+
+    socket.on('canal:entrar', async (datos, responder) => {
+      if (typeof responder !== 'function') return
+      const servidorId = datos?.servidorId
+      const canalId = datos?.canalId
+      if (!esId(servidorId) || !esId(canalId)) return responder({ ok: false, error: 'datos-invalidos' })
+      let permitido = false
+      try {
+        permitido = await permisoTexto(servidorId, canalId)
+      } catch (error) {
+        registrarError('revisar el permiso')(error)
+        return responder({ ok: false, error: 'error-servidor' })
+      }
+      if (!permitido) return responder({ ok: false, error: 'sin-permiso' })
+      if (socket.data.canalTexto) socket.leave(`texto:${socket.data.canalTexto}`)
+      socket.data.canalTexto = `${servidorId}/${canalId}`
+      socket.join(`texto:${servidorId}/${canalId}`)
+      responder({ ok: true })
+    })
+
+    socket.on('canal:salir', () => {
+      if (socket.data.canalTexto) socket.leave(`texto:${socket.data.canalTexto}`)
+      socket.data.canalTexto = null
+    })
+
+    socket.on('mensaje:enviar', async (datos, responder) => {
+      if (typeof responder !== 'function') return
+      const servidorId = datos?.servidorId
+      const canalId = datos?.canalId
+      const contenido = typeof datos?.contenido === 'string' ? datos.contenido.trim() : ''
+      if (!esId(servidorId) || !esId(canalId)) return responder({ ok: false, error: 'datos-invalidos' })
+      if (!contenido || contenido.length > MAX_MENSAJE) return responder({ ok: false, error: 'mensaje-invalido' })
+
+      // evita que alguien llene el canal de mensajes
+      const ahora = Date.now()
+      socket.data.envios = (socket.data.envios ?? []).filter((t) => ahora - t < VENTANA_MENSAJES_MS)
+      if (socket.data.envios.length >= MAX_MENSAJES_SEGUIDOS) return responder({ ok: false, error: 'muy-rapido' })
+      socket.data.envios.push(ahora)
+
+      try {
+        if (!(await permisoTexto(servidorId, canalId))) return responder({ ok: false, error: 'sin-permiso' })
+        const guardado = await mensajes.guardar({ servidorId, canalId, autorUid: uid, contenido })
+        const mensaje = { mensajeId: guardado.mensajeId, servidorId, canalId, autorUid: uid, contenido, creadoMs: guardado.creadoMs }
+        io.to(`texto:${servidorId}/${canalId}`).emit('mensaje:nuevo', mensaje)
+        responder({ ok: true, mensaje })
+      } catch (error) {
+        registrarError('guardar el mensaje')(error)
+        responder({ ok: false, error: 'error-servidor' })
+      }
     })
 
     // la barra de canales pide quien esta en llamada en cada canal del servidor

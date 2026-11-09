@@ -18,6 +18,21 @@ export function fechaSesion(fecha: Date, ahora: Date = new Date()): string {
   return `${fecha.getDate()} ${MESES[fecha.getMonth()]}, ${hora}`
 }
 
+const MESES_LARGOS = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre']
+
+/** Separador de dia en el chat: "Hoy", "Ayer" o "29 de septiembre". */
+export function diaMensaje(fecha: Date, ahora: Date = new Date()): string {
+  const ayer = new Date(ahora)
+  ayer.setDate(ahora.getDate() - 1)
+  if (mismoDia(fecha, ahora)) return 'Hoy'
+  if (mismoDia(fecha, ayer)) return 'Ayer'
+  const anio = fecha.getFullYear() === ahora.getFullYear() ? '' : ` de ${fecha.getFullYear()}`
+  return `${fecha.getDate()} de ${MESES_LARGOS[fecha.getMonth()]}${anio}`
+}
+
+/** Hora de un mensaje: "16:20". */
+export const horaCorta = (fecha: Date) => `${dosDigitos(fecha.getHours())}:${dosDigitos(fecha.getMinutes())}`
+
 /** Hora de un segmento: "16:21:04". */
 export const horaTexto = (fecha: Date) => [fecha.getHours(), fecha.getMinutes(), fecha.getSeconds()].map(dosDigitos).join(':')
 

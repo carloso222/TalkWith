@@ -1,6 +1,8 @@
+import { Volume2 } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router'
 import AjustesAudio from './AjustesAudio'
+import AudioRemoto from './AudioRemoto'
 import AvisoConexion from './AvisoConexion'
 import AvisoMicrofono from './AvisoMicrofono'
 import CallHeader from './CallHeader'
@@ -9,10 +11,12 @@ import ParticipantTile from './ParticipantTile'
 import RecordingBanner from './RecordingBanner'
 import RecordingDialog from './RecordingDialog'
 import TranscriptPanel from './TranscriptPanel'
+import { useAudioLlamada } from '../../hooks/useAudioLlamada'
 import { useMicrofono } from '../../hooks/useMicrofono'
 import { useRecordingFlow } from '../../hooks/useRecordingFlow'
 import { useSalaVoz } from '../../hooks/useSalaVoz'
 import { useSubtitlesAvailable } from '../../hooks/useSubtitlesAvailable'
+import Button from '../../components/ui/Button'
 import { cn } from '../../lib/cn'
 import { formatear } from '../../lib/time'
 import { rutas } from '../../lib/routes'
@@ -25,8 +29,9 @@ import type { Canal, Segmento } from '../../types'
  * Canal de voz (Figma 12–16): cuadrícula de participantes, controles flotantes,
  * transcripción en vivo y flujo de grabación con consentimiento.
  *
- * Los participantes llegan del servidor de socket.io (TW 12 y 14) y la
- * transcripcion se lee de firestore en vivo (TW 17).
+ * Los participantes llegan del servidor de socket.io (TW 12 y 14), el audio
+ * va directo entre navegadores con webrtc (TW 13) y la transcripcion se lee
+ * de firestore en vivo (TW 17).
  *
  * Estados de demo por URL (?demo=…):
  *   sin-subtitulos → Figma 13     rechazo → Figma 14
@@ -51,6 +56,18 @@ export default function VoiceChannel({ canal }: { canal: Canal }) {
     return !yoUid || ids.includes(yoUid) ? ids : [...ids, yoUid]
   }, [sala.participantes, yoUid])
   const datosDe = (uid: string) => sala.participantes.find((p) => p.uid === uid)
+
+  // audio con las demas personas
+  const audio = useAudioLlamada({
+    yoUid,
+    miConexion: sala.conexion,
+    participantes: sala.participantes,
+    conectado: sala.estado === 'conectado',
+    pista: mic.pista,
+  })
+  const [audioBloqueado, setAudioBloqueado] = useState(false)
+  // cambia al pulsar "Activar audio" para volver a intentar reproducir
+  const [activarAudio, setActivarAudio] = useState(0)
 
   const [ajustesAbiertos, setAjustesAbiertos] = useState(false)
   const [subtitulosActivos, setSubtitulosActivos] = useState(true)
@@ -156,6 +173,24 @@ export default function VoiceChannel({ canal }: { canal: Canal }) {
         {grabacion.fase === 'grabando' && <RecordingBanner tiempo={formatear(grabacion.segundos)} />}
         <AvisoConexion estado={sala.estado} error={sala.error} onReintentar={sala.reintentar} />
         <AvisoMicrofono estado={mic.estado} onReintentar={mic.reintentar} />
+        {audioBloqueado && (
+          <div role="status" className="mx-6 mt-4 flex items-center gap-3 rounded-xl border border-primary/40 bg-primary/10 px-4 py-3">
+            <Volume2 className="size-5 shrink-0 text-primary" />
+            <p className="flex-1 text-small">Tu navegador pausó el audio de la llamada.</p>
+            <Button
+              size="sm"
+              onClick={() => {
+                setAudioBloqueado(false)
+                setActivarAudio((n) => n + 1)
+              }}
+            >
+              Activar audio
+            </Button>
+          </div>
+        )}
+        {Object.entries(audio.remotos).map(([uid, stream]) => (
+          <AudioRemoto key={uid} stream={stream} activar={activarAudio} onBloqueado={() => setAudioBloqueado(true)} />
+        ))}
 
         <div className="min-h-0 flex-1 px-6 pt-6 pb-28">
           <div className={cn('grid h-full auto-rows-fr gap-4', participantes.length === 1 ? 'mx-auto max-w-3xl grid-cols-1' : participantes.length > 4 ? 'grid-cols-3' : 'grid-cols-2')}>
@@ -164,6 +199,9 @@ export default function VoiceChannel({ canal }: { canal: Canal }) {
               // tu tarjeta usa el nivel real del microfono, las demas lo que avisa el servidor
               const hablando = uid === yoUid ? mic.hablando : !silenciado && Boolean(datosDe(uid)?.hablando)
               const reconectando = uid === yoUid ? sala.estado === 'reconectando' : Boolean(datosDe(uid)?.reconectando)
+              // el audio con esa persona todavia no conecta
+              const estadoAudio = audio.estados[uid]
+              const senalDebil = uid !== yoUid && !reconectando && estadoAudio !== undefined && estadoAudio !== 'connected'
               const seleccionado = subtitulosVisibles && segSeleccionado?.hablanteUid === uid
               let subtitulo: string | undefined
               if (subtitulosVisibles) {
@@ -171,7 +209,7 @@ export default function VoiceChannel({ canal }: { canal: Canal }) {
                 else if (ultimo?.hablanteUid === uid) subtitulo = ultimo.texto
               }
               return (
-                <ParticipantTile key={uid} uid={uid} esYo={uid === yoUid} silenciado={silenciado} hablando={hablando} seleccionado={seleccionado} subtitulo={subtitulo} reconectando={reconectando} />
+                <ParticipantTile key={uid} uid={uid} esYo={uid === yoUid} silenciado={silenciado} hablando={hablando} seleccionado={seleccionado} subtitulo={subtitulo} reconectando={reconectando} senalDebil={senalDebil} />
               )
             })}
           </div>

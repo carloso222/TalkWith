@@ -19,6 +19,8 @@ export function useMicrofono() {
   // cambia este numero para volver a pedir permiso
   const [intento, setIntento] = useState(0)
   const streamRef = useRef<MediaStream | null>(null)
+  // pista de audio que se manda a las demas personas (webrtc)
+  const [pistaActual, setPistaActual] = useState<MediaStreamTrack | null>(null)
 
   useEffect(() => {
     if (!soportado) return
@@ -38,6 +40,7 @@ export function useMicrofono() {
         streamRef.current = stream
         const pista = stream.getAudioTracks()[0]
         setActual(pista?.getSettings().deviceId ?? '')
+        setPistaActual(pista ?? null)
         // si desconectan el microfono a medio llamada
         pista?.addEventListener('ended', () => activo && setEstado('sin-microfono'))
 
@@ -72,6 +75,7 @@ export function useMicrofono() {
       contexto?.close()
       streamRef.current?.getTracks().forEach((t) => t.stop())
       streamRef.current = null
+      setPistaActual(null)
     }
   }, [soportado, elegido, intento])
 
@@ -90,6 +94,7 @@ export function useMicrofono() {
     nivel: listo && !silenciado ? nivel : 0,
     dispositivos,
     dispositivoActual: actual,
+    pista: listo ? pistaActual : null,
     alternarSilencio: () => setSilenciado(!silenciado),
     cambiarDispositivo: (id: string) => {
       setEstado('pidiendo')

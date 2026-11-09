@@ -1,6 +1,12 @@
 import { cert, initializeApp } from 'firebase-admin/app'
 import { getAuth } from 'firebase-admin/auth'
-import { FieldValue, getFirestore } from 'firebase-admin/firestore'
+import { FieldValue, getFirestore, Timestamp } from 'firebase-admin/firestore'
+
+// quita acentos y pasa a minusculas (igual que el frontend)
+const normalizar = (texto) => texto.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
+
+// palabras de mas de 3 letras, sin repetir, para la busqueda (las reglas aceptan hasta 50)
+export const terminos = (texto) => [...new Set(normalizar(texto).split(/\s+/).filter((w) => w.length > 3))].slice(0, 50)
 
 // "00:24:18" a partir de milisegundos
 export function duracionTexto(ms) {
@@ -30,17 +36,28 @@ export function iniciarFirebase(env) {
 
   const esMiembro = async (uid, servidorId) => (await db.doc(`servidores/${servidorId}/miembros/${uid}`).get()).exists
 
+  async function esCanalDe(uid, servidorId, canalId, tipo) {
+    const [miembro, canal] = await Promise.all([esMiembro(uid, servidorId), db.doc(`servidores/${servidorId}/canales/${canalId}`).get()])
+    return miembro && canal.exists && canal.get('tipo') === tipo
+  }
+
   return {
     verificarToken: async (token) => (await auth.verifyIdToken(token)).uid,
 
     puedeVerServidor: esMiembro,
 
-    puedeEntrarCanal: async (uid, servidorId, canalId) => {
-      const [miembro, canal] = await Promise.all([
-        esMiembro(uid, servidorId),
-        db.doc(`servidores/${servidorId}/canales/${canalId}`).get(),
-      ])
-      return miembro && canal.exists && canal.get('tipo') === 'voz'
+    puedeEntrarCanal: (uid, servidorId, canalId) => esCanalDe(uid, servidorId, canalId, 'voz'),
+
+    puedeEscribirCanal: (uid, servidorId, canalId) => esCanalDe(uid, servidorId, canalId, 'texto'),
+
+    // el servidor guarda los mensajes y les pone la hora, asi todos los ven en el mismo orden
+    mensajes: {
+      guardar: async ({ servidorId, canalId, autorUid, contenido }) => {
+        const creadoEn = Timestamp.now()
+        const ref = db.collection(`servidores/${servidorId}/canales/${canalId}/mensajes`).doc()
+        await ref.set({ servidorId, canalId, autorUid, contenido, creadoEn, terminos: terminos(contenido) })
+        return { mensajeId: ref.id, creadoMs: creadoEn.toMillis() }
+      },
     },
 
     // el servidor guarda las sesiones de voz, asi quedan bien aunque alguien cierre la pestana

@@ -9,6 +9,7 @@ interface RespuestaUnirse {
   error?: string
   sesionId?: string | null
   inicio?: number
+  conexion?: number
   participantes?: ParticipanteLlamada[]
 }
 
@@ -31,6 +32,8 @@ export function useSalaVoz(servidorId: string, canalId: string, yo: { silenciado
   const [participantes, setParticipantes] = useState<ParticipanteLlamada[]>([])
   const [sesionId, setSesionId] = useState<string | null>(null)
   const [inicio, setInicio] = useState<number | null>(null)
+  // mi numero de conexion en la sala (lo usa el audio para saber cuando rehacerse)
+  const [conexion, setConexion] = useState(0)
   // cambia este numero para volver a intentar
   const [intento, setIntento] = useState(0)
 
@@ -51,6 +54,7 @@ export function useSalaVoz(servidorId: string, canalId: string, yo: { silenciado
         setParticipantes(r.participantes ?? [])
         setSesionId(r.sesionId ?? null)
         setInicio(r.inicio ?? null)
+        setConexion(r.conexion ?? 0)
       })
     }
 
@@ -105,5 +109,5 @@ export function useSalaVoz(servidorId: string, canalId: string, yo: { silenciado
     setIntento(intento + 1)
   }
 
-  return { estado, error, participantes, sesionId, inicio, reintentar }
+  return { estado, error, participantes, sesionId, inicio, conexion, reintentar }
 }

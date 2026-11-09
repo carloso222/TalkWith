@@ -9,7 +9,7 @@
  */
 import * as db from '../mocks/data'
 import { normalizar, terminos } from '../lib/texto'
-import type { Grabacion, Mensaje, ResumenInicio } from '../types'
+import type { Grabacion, ResumenInicio } from '../types'
 import { servidoresDe, uidDe } from './firestore/vistas'
 import { simular } from './simular'
 
@@ -22,12 +22,10 @@ export { channelService } from './canales'
 export { enlaceInvitacion, inviteService } from './invitaciones'
 // sesiones de voz y transcripciones en firestore (TW 17)
 export { sessionService } from './sesiones'
+// historial de mensajes en firestore; los nuevos llegan por socket.io (TW 09)
+export { messageService } from './mensajes'
 export { normalizar, terminos }
 
-/* ---------- Mensajes ---------- */
-export const messageService = {
-  getByChannel: (canalId: string): Promise<Mensaje[]> => simular(db.mensajes.filter((m) => m.canalId === canalId)),
-}
 
 /* ---------- Grabaciones ---------- */
 export const recordingService = {
