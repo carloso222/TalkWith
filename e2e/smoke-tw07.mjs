@@ -74,6 +74,9 @@ try {
   // 4. Unirse con la invitación de Arte Digital
   await page.goto(`${APP}/app/unirse`)
   await page.getByLabel('Enlace o código de invitación').fill('talkwith.app/i/arte-digital-5mz8')
+  await page.waitForTimeout(3000)
+  console.log('[unirse] campo:', await page.getByLabel('Enlace o código de invitación').inputValue())
+  console.log('[unirse] sofia en Firestore:', JSON.stringify(await docFs('invitaciones/arte-digital-5mz8')))
   await page.getByText(/Invitación válida/i).waitFor({ timeout: 15000 })
   await page.getByRole('button', { name: /Unirme al servidor/i }).click()
   await page.waitForURL(/\/app\/s\/arte-digital/, { timeout: 20000 })
@@ -99,7 +102,7 @@ try {
 } catch (e) {
   for (const [i, p] of navegador.contexts().flatMap((c) => c.pages()).entries()) {
     await p.screenshot({ path: `${DIR}/error-${i}.png` }).catch(() => {})
-    console.log(`--- página ${i}: ${p.url()}\n` + (await p.locator('body').innerText().catch(() => '')).slice(0, 1500))
+    console.log(`--- página ${i}: ${p.url()}\n` + (await p.locator('body').innerText().catch(() => '')).slice(-1200))
   }
   console.error(e)
   process.exitCode = 1
