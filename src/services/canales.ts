@@ -55,6 +55,17 @@ async function guardar(servidorId: string, canalId: string, datos: DatosCanal): 
 const buscar = (canalId: string): Canal | undefined =>
   Object.values(useDatosStore.getState().canales).flat().find((c) => c.canalId === canalId)
 
+/**
+ * Para escribir: el id de un canal solo es único dentro de su servidor, y un gestor de otro servidor
+ * puede crear uno con el mismo id. Si hay más de un servidor con ese id, no se adivina el destino.
+ */
+function buscarParaEscribir(canalId: string, mensaje404: string): Canal {
+  const coincidencias = Object.values(useDatosStore.getState().canales).flat().filter((c) => c.canalId === canalId)
+  if (coincidencias.length === 0) throw new ApiError(404, mensaje404)
+  if (coincidencias.length > 1) throw new ApiError(409, 'No pudimos identificar el canal. Recarga la página e inténtalo de nuevo.')
+  return coincidencias[0]
+}
+
 export const channelService = {
   getByServer: (servidorId: string): Promise<Canal[]> => Promise.resolve([...listar(servidorId)]),
   getById: (canalId: string): Promise<Canal> => {
@@ -68,15 +79,13 @@ export const channelService = {
     return guardar(servidorId, canalId, datos)
   },
   update: async (canalId: string, datos: DatosCanal): Promise<Canal> => {
-    const actual = buscar(canalId)
-    if (!actual) throw new ApiError(404, 'El canal no existe o fue eliminado.')
+    const actual = buscarParaEscribir(canalId, 'El canal no existe o fue eliminado.')
     exigirGestor(actual.servidorId)
     revisarCanal(actual.servidorId, datos, canalId)
     return guardar(actual.servidorId, canalId, datos)
   },
   remove: async (canalId: string): Promise<void> => {
-    const actual = buscar(canalId)
-    if (!actual) throw new ApiError(404, 'El canal ya había sido eliminado.')
+    const actual = buscarParaEscribir(canalId, 'El canal ya había sido eliminado.')
     exigirGestor(actual.servidorId)
     try {
       await deleteDoc(doc(db, 'servidores', actual.servidorId, 'canales', canalId))

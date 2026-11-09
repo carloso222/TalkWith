@@ -338,7 +338,10 @@ service cloud.firestore {
         && request.resource.data.invitaUid == request.auth.uid
         && request.resource.data.creadaEn == request.time
         && request.resource.data.expiraEn is timestamp
-        && request.resource.data.expiraEn > request.time;
+        && request.resource.data.expiraEn > request.time
+        // Vigencia acotada (la app usa 7 días): una invitación eterna sería una puerta trasera que nadie
+        // puede revocar, porque las invitaciones no se pueden listar.
+        && request.resource.data.expiraEn <= request.time + duration.value(8, 'd');
       allow update: if false;
       allow delete: if gestor(resource.data.servidorId);
     }

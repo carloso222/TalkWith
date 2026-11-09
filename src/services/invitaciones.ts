@@ -13,11 +13,15 @@ import { userService } from './userService'
 const PATRON_CODIGO = /^[a-z0-9-]{12,64}$/
 const MSJ_INVALIDA = 'El enlace no es válido o ya expiró. Pide uno nuevo a quien te invitó.'
 
-/** Invitaciones creadas en esta sesión (las reglas no permiten listarlas). */
+/**
+ * Invitaciones creadas en esta pestaña (las reglas no permiten listarlas). La clave incluye el uid
+ * de la sesión para que otra cuenta que entre después en la misma pestaña no vea los códigos.
+ */
 const creadas = new Map<string, Invitacion>()
+const claveCreada = (servidorId: string): string => `${uidDe()}/${servidorId}`
 
 export const recordarInvitacion = (invitacion: Invitacion): void => {
-  creadas.set(invitacion.servidorId, invitacion)
+  creadas.set(claveCreada(invitacion.servidorId), invitacion)
 }
 
 /** Enlace completo para compartir una invitacion. */
@@ -67,7 +71,7 @@ async function validar(texto: string): Promise<Validada | null> {
 export const inviteService = {
   validate: async (texto: string): Promise<Invitacion | null> => (await validar(texto))?.invitacion ?? null,
   /** Invitacion creada en esta sesión para un servidor (no se puede listar desde Firestore). */
-  getByServer: (servidorId: string): Promise<Invitacion | null> => Promise.resolve(creadas.get(servidorId) ?? null),
+  getByServer: (servidorId: string): Promise<Invitacion | null> => Promise.resolve(creadas.get(claveCreada(servidorId)) ?? null),
   /** Agrega al usuario como miembro del servidor de la invitacion y espera a verlo en la caché. */
   join: async (texto: string, uid?: string): Promise<Servidor> => {
     const yo = uidDe(uid)
