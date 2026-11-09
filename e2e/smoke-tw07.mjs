@@ -22,7 +22,10 @@ async function cuentas() {
 }
 
 async function entrarConGoogle(page, nombre, usuario) {
+  page.on('console', (m) => { if (m.type() === 'error') console.log('[consola]', m.text()) })
+  page.on('pageerror', (e) => console.log('[pageerror]', e.message))
   await page.goto(`${APP}/login`)
+  await page.getByRole('button', { name: /Continuar con Google/i }).waitFor({ timeout: 30000 })
   const [popup] = await Promise.all([
     page.waitForEvent('popup'),
     page.getByRole('button', { name: /Continuar con Google/i }).click(),
@@ -101,7 +104,10 @@ try {
   if (veServidores || veMiembros) falla('5. Cuenta ajena', `ve servidores=${veServidores}, miembros=${veMiembros}`)
   ok('5. Cuenta ajena', `no ve servidores ajenos y entrar directo a estudio-diseno no muestra datos (${page2.url().replace(APP, '')})`)
 } catch (e) {
-  for (const [i, p] of navegador.contexts().flatMap((c) => c.pages()).entries()) await p.screenshot({ path: `${DIR}/error-${i}.png` }).catch(() => {})
+  for (const [i, p] of navegador.contexts().flatMap((c) => c.pages()).entries()) {
+    await p.screenshot({ path: `${DIR}/error-${i}.png` }).catch(() => {})
+    console.log(`--- página ${i}: ${p.url()}\n` + (await p.locator('body').innerText().catch(() => '')).slice(0, 1500))
+  }
   console.error(e)
   process.exitCode = 1
 } finally {
