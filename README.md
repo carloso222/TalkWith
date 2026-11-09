@@ -80,7 +80,7 @@ Por qué:
 4. **Recargar la página.** Firebase restaura la sesión guardada; mientras tanto `ProtectedRoute` muestra la pantalla de carga en lugar de mandar al login.
 5. **Usuario actual.** El nombre y el avatar se ven en el panel de usuario (abajo a la izquierda) y en Perfil.
 6. **Cerrar sesión.** `authStore.logout()` cierra la sesión en Firebase, se limpia el estado local y la app redirige a `/login`.
-7. **Sesión inválida.** Si Firebase invalida la sesión (por ejemplo, la cuenta se deshabilitó), `onAuthStateChanged` avisa que ya no hay usuario y `ProtectedRoute` manda al login, recordando a qué página se quería entrar. *Pendiente: mostrar un mensaje que explique que la sesión expiró.*
+7. **Sesión expirada o inválida.** Si Firebase invalida la sesión (por ejemplo, la cuenta se deshabilitó o se revocó) o llega un 401, `onAuthStateChanged` avisa que ya no hay usuario. `lib/sesion.ts` revisa si la persona pulsó «Cerrar sesión» (`authStore.cerrandoSesion`); si no fue así, deja en `authStore.avisoLogin` el mensaje «Tu sesión expiró o ya no es válida. Vuelve a iniciar sesión.». `ProtectedRoute` manda al login recordando la página, y el login muestra ese mensaje hasta el siguiente intento.
 
 ### Cómo viaja el token
 
@@ -91,7 +91,14 @@ Nunca se agrega el token a mano en cada llamada:
 | Firestore | El SDK de Firebase lo adjunta solo en cada lectura y escritura | Las reglas de `firestore.rules` (`request.auth.uid`) |
 | Servidor de Socket.io | `src/lib/socket.ts` lo pide con `obtenerTokenSocket()` en cada conexión y reconexión (opción `auth` de socket.io) | `server/src/app.js` con `verifyIdToken` de `firebase-admin`; sin token o con uno inválido rechaza la conexión |
 
-**Errores en un solo lugar.** `src/services/firestore/errores.ts` convierte el `permission-denied` de Firestore en un `ApiError` con estado **403**, y `manejarError` (`src/services/errores.ts`) es el único lugar que muestra los errores en pantalla. *Pendiente: tratar el 401 (sesión no válida) en ese mismo lugar.*
+**Errores en un solo lugar.** `src/services/firestore/errores.ts` convierte los errores de Firestore en un `ApiError`: `unauthenticated` en **401** y `permission-denied` en **403**. `manejarError` (`src/services/errores.ts`) es el único lugar que los maneja:
+
+| Estado | Qué pasa |
+|---|---|
+| **401** (sin sesión o token inválido) | Llama al manejador que registra `lib/sesion.ts`, que cierra la sesión. El login muestra «Tu sesión expiró…» (no hay toast) |
+| **403** (sin permiso) y los demás | Toast con el mensaje del error, por ejemplo «No tienes permiso para hacer esto.» |
+
+Al 401 se llega desde tres lados: los servicios de Firestore (`aApiError`), la escucha de membresías (`firestore/escuchas.ts`) y el socket. Cuando el servidor de Socket.io responde `token-invalido`, `lib/socket.ts` primero le pide a Firebase un token nuevo: si Firebase no puede renovarlo, la sesión ya no sirve y manda el 401 a `manejarError`; si lo renueva, reintenta una vez. Así un problema del servidor de voz no saca a nadie de su sesión.
 
 **Llaves y secretos.** Ninguna llave se sube al repositorio. `.env.example` lista las variables del frontend sin valores reales, y [server/README.md](server/README.md) explica las del servidor. La cuenta de servicio de Firebase se guarda fuera del repo.
 

@@ -30,3 +30,13 @@ export async function obtenerTokenSocket(): Promise<string> {
   if (!auth.currentUser) throw new Error('Sin sesión')
   return auth.currentUser.getIdToken()
 }
+
+/**
+ * Pide a Firebase un token nuevo. Si la sesión ya no es válida (cuenta deshabilitada,
+ * sesión revocada) Firebase rechaza la promesa y además cierra la sesión por su cuenta.
+ */
+export async function renovarToken(): Promise<void> {
+  await auth.authStateReady()
+  if (!auth.currentUser) throw new Error('Sin sesión')
+  await auth.currentUser.getIdToken(true)
+}

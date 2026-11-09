@@ -1,15 +1,38 @@
 import { io, type Socket } from 'socket.io-client'
-import { obtenerTokenSocket } from './firebase'
+import { ApiError, manejarError, MENSAJE_SESION_EXPIRADA } from '../services/errores'
+import { obtenerTokenSocket, renovarToken } from './firebase'
 
 // servidor de socket.io (TW 05)
 const URL_SERVIDOR = import.meta.env.VITE_SOCKET_URL || 'http://localhost:3000'
 
 let socket: Socket | null = null
+// ya se reintentó con un token recién renovado (se reinicia al conectar)
+let reintentoConTokenNuevo = false
+
+/**
+ * El servidor rechazó el token. Antes de tratarlo como 401 se le pregunta a Firebase:
+ * - si Firebase no puede renovar el token, la sesión ya no sirve → 401 al manejo central;
+ * - si lo renueva, se reintenta una vez con el token nuevo. Si vuelve a fallar es un
+ *   problema del servidor y no se cierra la sesión (los hooks muestran el error).
+ */
+async function alRechazarToken(s: Socket): Promise<void> {
+  if (reintentoConTokenNuevo) return
+  reintentoConTokenNuevo = true
+  try {
+    await renovarToken()
+  } catch (e) {
+    // sin internet no se sabe si la sesión sirve; no la cerramos
+    if ((e as { code?: string } | null)?.code === 'auth/network-request-failed') return
+    manejarError(new ApiError(401, MENSAJE_SESION_EXPIRADA))
+    return
+  }
+  if (s === socket && !s.active) s.connect()
+}
 
 /** Regresa el socket de la app y lo conecta si hace falta. */
 export function obtenerSocket(): Socket {
   if (!socket) {
-    socket = io(URL_SERVIDOR, {
+    const nuevo = io(URL_SERVIDOR, {
       autoConnect: false,
       // el token se pide en cada conexion, asi al reconectar se manda uno vigente
       auth: (cb) => {
@@ -19,6 +42,14 @@ export function obtenerSocket(): Socket {
         )
       },
     })
+    reintentoConTokenNuevo = false
+    nuevo.on('connect', () => {
+      reintentoConTokenNuevo = false
+    })
+    nuevo.on('connect_error', (err: Error) => {
+      if (err.message === 'token-invalido') void alRechazarToken(nuevo)
+    })
+    socket = nuevo
   }
   // active = ya esta conectado o reintentando solo
   if (!socket.active) socket.connect()
