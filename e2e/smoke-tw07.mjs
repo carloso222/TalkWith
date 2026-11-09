@@ -27,7 +27,7 @@ async function entrarConGoogle(page, nombre, usuario) {
   await page.goto(`${APP}/login`)
   await page.getByRole('button', { name: /Continuar con Google/i }).waitFor({ timeout: 30000 })
   const sub = usuario.replace('.', '-')
-  await page.evaluate(([s, c, n]) => import('/e2e/loginEmulador.ts').then((m) => m.entrar(s, c, n)), [sub, `${sub}@example.com`, nombre])
+  const uid = await page.evaluate(([s, c, n]) => import('/e2e/loginEmulador.ts').then((m) => m.entrar(s, c, n)), [sub, `${sub}@example.com`, nombre])
   await page.waitForURL(/\/(registro|app)/, { timeout: 20000 })
   if (page.url().includes('/registro')) {
     await page.getByLabel('Nombre de usuario').fill(usuario)
@@ -35,6 +35,7 @@ async function entrarConGoogle(page, nombre, usuario) {
     await page.getByRole('button', { name: /Crear mi cuenta/i }).click()
     await page.waitForURL(/\/app/, { timeout: 20000 })
   }
+  return uid
 }
 
 const navegador = await chromium.launch()
@@ -42,8 +43,7 @@ try {
   // 1. Entrar con Google (emulador)
   const ctx = await navegador.newContext({ viewport: { width: 1440, height: 900 } })
   const page = await ctx.newPage()
-  await entrarConGoogle(page, 'Carlos Prueba', 'carlos.prueba')
-  const yo = (await cuentas())[0]
+  const yo = { localId: await entrarConGoogle(page, 'Carlos Prueba', 'carlos.prueba') }
   if (!yo?.localId) falla('1. Login', 'no apareció la cuenta en el emulador de Auth')
   if (!(await docFs(`usuarios/${yo.localId}`))) falla('1. Login', 'no se creó usuarios/{uid}')
   await page.screenshot({ path: `${DIR}/1-login.png` })
