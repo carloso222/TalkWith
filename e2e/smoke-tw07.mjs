@@ -31,10 +31,10 @@ async function entrarConGoogle(page, nombre, usuario) {
     page.getByRole('button', { name: /Continuar con Google/i }).click(),
   ])
   await popup.waitForLoadState()
-  await popup.getByText(/Add new account/i).click()
-  await popup.getByText(/Auto-generate user information/i).click()
+  await popup.getByRole('button', { name: /Add new account/i }).click()
+  await popup.getByRole('button', { name: /Auto-generate user information/i }).click()
   await popup.locator('#display-name-input, input[name="displayName"]').first().fill(nombre).catch(() => {})
-  await popup.getByText(/Sign in with Google\.com/i).click()
+  await popup.getByRole('button', { name: /Sign in with Google\.com/i }).click()
   await page.waitForURL(/\/(registro|app)/, { timeout: 20000 })
   if (page.url().includes('/registro')) {
     await page.getByLabel('Nombre de usuario').fill(usuario)
