@@ -11,6 +11,7 @@ import { useDocumentTitle } from '../../hooks/useDocumentTitle'
 import { rutas } from '../../lib/routes'
 import { hayErrores, REGLAS, validarRegistro } from '../../lib/validaciones'
 import { ApiError, manejarError } from '../../services'
+import { sesionConGoogle } from '../../services/authService'
 import { completarRegistro } from '../../services/perfilService'
 import { useAuthStore } from '../../store/authStore'
 import { useUiStore } from '../../store/uiStore'
@@ -18,7 +19,7 @@ import { Halos } from './Login'
 
 /**
  * Figma 04 · Registro — completar perfil. Responsable: Carlos.
- * Se muestra la primera vez que alguien entra con Google: confirma su nombre
+ * Se muestra la primera vez que alguien entra (con Google o con correo): confirma su nombre
  * visible, elige un nombre de usuario único y acepta términos y la política de
  * grabación. Los datos del perfil salen de la cuenta de Google (ya autenticada).
  */
@@ -28,6 +29,7 @@ export default function Registro() {
   const cuenta = useAuthStore((s) => s.usuario)!
   const setSesion = useAuthStore((s) => s.setSesion)
   const notify = useUiStore((s) => s.notify)
+  const conGoogle = sesionConGoogle()
 
   const [nombre, setNombre] = useState(cuenta.nombre)
   const [usuario, setUsuario] = useState('@')
@@ -78,8 +80,8 @@ export default function Registro() {
           <div className="flex items-center gap-4">
             <Avatar uid={cuenta.uid} size="lg" />
             <div className="flex flex-col gap-1">
-              <p className="text-small font-medium">Foto de tu cuenta de Google</p>
-              <button type="button" onClick={() => notify('info', 'Cambiar foto', 'En esta entrega la foto se toma de tu cuenta de Google.')} className="self-start text-small font-medium text-primary hover:underline">
+              <p className="text-small font-medium">{conGoogle ? 'Foto de tu cuenta de Google' : 'Tu avatar'}</p>
+              <button type="button" onClick={() => notify('info', 'Cambiar foto', conGoogle ? 'En esta entrega la foto se toma de tu cuenta de Google.' : 'En esta entrega el avatar usa tus iniciales.')} className="self-start text-small font-medium text-primary hover:underline">
                 Cambiar foto
               </button>
             </div>
@@ -116,11 +118,11 @@ export default function Registro() {
           <div className="flex flex-col gap-2">
             <span className="text-small font-medium">Correo</span>
             <div className="flex h-11 items-center gap-2.5 rounded-[10px] border border-line bg-base px-3.5 text-body text-muted">
-              <GoogleLogo size={16} />
+              {conGoogle && <GoogleLogo size={16} />}
               <span className="flex-1 truncate">{cuenta.correo}</span>
               <Lock className="size-4" aria-label="No editable" />
             </div>
-            <span className="text-caption text-muted">Vinculado con tu cuenta de Google</span>
+            <span className="text-caption text-muted">{conGoogle ? 'Vinculado con tu cuenta de Google' : 'Es el correo con el que creaste tu cuenta'}</span>
           </div>
 
           <div className="flex flex-col gap-3">
