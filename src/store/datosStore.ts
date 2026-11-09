@@ -57,7 +57,7 @@ const inicial = {
   pendientes: {},
 }
 
-export const useDatosStore = create<DatosState>()((set) => {
+export const useDatosStore = create<DatosState>()((set, get) => {
   const cambiar = (parcial: (s: DatosState) => Partial<DatosState>) =>
     set((s) => ({ ...parcial(s), version: s.version + 1 }))
   return {
@@ -68,7 +68,13 @@ export const useDatosStore = create<DatosState>()((set) => {
     ponerCanales: (sid, canales) => cambiar((s) => ({ canales: { ...s.canales, [sid]: canales } })),
     ponerPerfil: (uid, perfil) => cambiar((s) => ({ perfiles: { ...s.perfiles, [uid]: perfil } })),
     quitarPerfil: (uid) => cambiar((s) => ({ perfiles: sin(s.perfiles, uid) })),
-    ponerPrevia: (sid, servidor) => cambiar((s) => ({ previas: { ...s.previas, [sid]: servidor } })),
+    // Idempotente: validar una invitación vuelve a poner la misma previa, y si eso subiera `version`,
+    // useService volvería a validar sin fin (Unirse se quedaba cargando y leyendo Firestore en bucle).
+    ponerPrevia: (sid, servidor) => {
+      const actual = get().previas[sid]
+      if (actual && JSON.stringify(actual) === JSON.stringify(servidor)) return
+      cambiar((s) => ({ previas: { ...s.previas, [sid]: servidor } }))
+    },
     marcarPendiente: (sid) => cambiar((s) => ({ pendientes: { ...s.pendientes, [sid]: true } })),
     quitarPendiente: (sid) => cambiar((s) => ({ pendientes: sin(s.pendientes, sid) })),
     quitarServidor: (sid) =>

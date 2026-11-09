@@ -8,6 +8,16 @@ const perfil = { uid: 'u', nombre: 'U', usuario: 'u', iniciales: 'U', color: '#f
 describe('datosStore', () => {
   beforeEach(() => useDatosStore.getState().limpiar())
 
+  it('poner la misma previa no incrementa version (evita que Unirse valide en bucle)', () => {
+    const previa = { ...srv, servidorId: 'B', totalMiembros: 0 }
+    useDatosStore.getState().ponerPrevia('B', previa)
+    const antes = useDatosStore.getState().version
+    useDatosStore.getState().ponerPrevia('B', { ...previa })
+    expect(useDatosStore.getState().version).toBe(antes)
+    useDatosStore.getState().ponerPrevia('B', { ...previa, nombre: 'Otro' })
+    expect(useDatosStore.getState().version).toBe(antes + 1)
+  })
+
   it('cada mutación incrementa version', () => {
     const s = useDatosStore.getState()
     const acciones: Array<() => void> = [
