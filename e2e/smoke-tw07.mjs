@@ -26,17 +26,8 @@ async function entrarConGoogle(page, nombre, usuario) {
   page.on('pageerror', (e) => console.log('[pageerror]', e.message))
   await page.goto(`${APP}/login`)
   await page.getByRole('button', { name: /Continuar con Google/i }).waitFor({ timeout: 30000 })
-  const [popup] = await Promise.all([
-    page.waitForEvent('popup'),
-    page.getByRole('button', { name: /Continuar con Google/i }).click(),
-  ])
-  await popup.waitForLoadState()
-  await popup.getByRole('button', { name: /Add new account/i }).click()
-  await popup.locator('#email-input').fill(`${usuario.replace('.', '-')}@example.com`)
-  await popup.locator('#display-name-input').fill(nombre)
-  const boton = popup.locator('#sign-in')
-  console.log('[popup] sign-in deshabilitado:', await boton.isDisabled())
-  await boton.click()
+  const sub = usuario.replace('.', '-')
+  await page.evaluate(([s, c, n]) => import('/e2e/loginEmulador.ts').then((m) => m.entrar(s, c, n)), [sub, `${sub}@example.com`, nombre])
   await page.waitForURL(/\/(registro|app)/, { timeout: 20000 })
   if (page.url().includes('/registro')) {
     await page.getByLabel('Nombre de usuario').fill(usuario)
