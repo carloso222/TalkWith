@@ -42,6 +42,8 @@ export interface Miembro {
   /** Grupo con que se muestra en la columna de miembros. */
   grupo?: string
   unidoEn: string
+  /** Correo de la cuenta; solo lo guarda la membresía en Firestore. */
+  correo?: string
 }
 
 export interface Canal {

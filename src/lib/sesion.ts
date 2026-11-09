@@ -1,15 +1,19 @@
 import type { Unsubscribe } from 'firebase/auth'
-import { asegurarPerfil } from '../services/perfilService'
 import { cerrarSesion, escucharSesion } from '../services/authService'
+import { detenerEscuchas, iniciarEscuchas } from '../services/firestore/escuchas'
+import { asegurarPerfil } from '../services/perfilService'
 import { useAuthStore } from '../store/authStore'
+import { useDatosStore } from '../store/datosStore'
 import { useUiStore } from '../store/uiStore'
 import { useVoiceStore } from '../store/voiceStore'
 
 /** Clave que usaba la sesión simulada; se borra por si quedó de una versión anterior. */
 const CLAVE_SESION_ANTIGUA = 'talkwith-auth'
 
-/** Deja la app sin rastro de la sesión anterior. En la Fase 2 aquí se detienen las escuchas de Firestore. */
+/** Deja la app sin rastro de la sesión anterior: detiene las escuchas de Firestore y vacía la caché. */
 export function limpiarEstadoLocal(): void {
+  detenerEscuchas()
+  useDatosStore.getState().limpiar()
   useAuthStore.getState().limpiar()
   useVoiceStore.setState(useVoiceStore.getInitialState(), true)
   sessionStorage.removeItem(CLAVE_SESION_ANTIGUA)
@@ -27,6 +31,7 @@ export function iniciarEscuchaSesion(): Unsubscribe {
     try {
       const { usuario, perfilCompleto } = await asegurarPerfil(user)
       if (miVersion !== version) return
+      iniciarEscuchas(usuario.uid)
       useAuthStore.getState().setSesion(usuario, perfilCompleto)
     } catch (error) {
       if (miVersion !== version) return

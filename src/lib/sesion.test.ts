@@ -5,6 +5,8 @@ const srv = vi.hoisted(() => ({
   oyente: null as null | ((u: User | null) => Promise<void> | void),
   cerrarSesion: vi.fn(async () => {}),
   asegurarPerfil: vi.fn(),
+  iniciarEscuchas: vi.fn(),
+  detenerEscuchas: vi.fn(),
 }))
 
 vi.mock('../services/authService', () => ({
@@ -15,8 +17,13 @@ vi.mock('../services/authService', () => ({
   },
 }))
 vi.mock('../services/perfilService', () => ({ asegurarPerfil: srv.asegurarPerfil }))
+vi.mock('../services/firestore/escuchas', () => ({
+  iniciarEscuchas: srv.iniciarEscuchas,
+  detenerEscuchas: srv.detenerEscuchas,
+}))
 
 import { useAuthStore } from '../store/authStore'
+import { useDatosStore } from '../store/datosStore'
 import { useUiStore } from '../store/uiStore'
 import { useVoiceStore } from '../store/voiceStore'
 import type { Usuario } from '../types'
@@ -28,6 +35,8 @@ describe('iniciarEscuchaSesion', () => {
   beforeEach(() => {
     srv.cerrarSesion.mockClear()
     srv.asegurarPerfil.mockReset()
+    srv.iniciarEscuchas.mockReset()
+    srv.detenerEscuchas.mockReset()
     iniciarEscuchaSesion()
   })
 
@@ -35,6 +44,34 @@ describe('iniciarEscuchaSesion', () => {
     srv.asegurarPerfil.mockResolvedValue({ usuario: ana, perfilCompleto: true })
     await srv.oyente!({ uid: 'u1' } as User)
     expect(useAuthStore.getState()).toMatchObject({ estado: 'autenticado', usuario: ana, perfilCompleto: true })
+  })
+
+  it('con un usuario inicia las escuchas de Firestore con su uid antes de marcar la sesión', async () => {
+    useAuthStore.getState().limpiar()
+    let estadoAlIniciar = ''
+    srv.iniciarEscuchas.mockImplementation(() => {
+      estadoAlIniciar = useAuthStore.getState().estado
+    })
+    srv.asegurarPerfil.mockResolvedValue({ usuario: ana, perfilCompleto: true })
+    await srv.oyente!({ uid: 'u1' } as User)
+    expect(srv.iniciarEscuchas).toHaveBeenCalledWith('u1')
+    expect(estadoAlIniciar).toBe('anonimo')
+    expect(useAuthStore.getState().estado).toBe('autenticado')
+  })
+
+  it('sin usuario detiene las escuchas y vacía la caché de datos', async () => {
+    useDatosStore.getState().ponerEstado('listo')
+    useDatosStore.getState().marcarPendiente('A')
+    await srv.oyente!(null)
+    expect(srv.detenerEscuchas).toHaveBeenCalled()
+    expect(useDatosStore.getState()).toMatchObject({ estado: 'inactivo', pendientes: {}, servidores: {}, perfiles: {} })
+  })
+
+  it('si falla el perfil no inicia las escuchas', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    srv.asegurarPerfil.mockRejectedValue(new Error('sin permiso'))
+    await srv.oyente!({ uid: 'u1' } as User)
+    expect(srv.iniciarEscuchas).not.toHaveBeenCalled()
   })
 
   it('al recibir null limpia sesión, rol demo, voz y la clave heredada', async () => {
