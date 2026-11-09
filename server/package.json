@@ -1,0 +1,24 @@
+{
+  "name": "talkwith-servidor",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Servidor de Socket.io de TalkWith: valida el token de Firebase y maneja las salas de voz",
+  "type": "module",
+  "main": "src/index.js",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch --env-file-if-exists=.env src/index.js",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "express": "^5.3.0",
+    "firebase-admin": "^13.10.0",
+    "socket.io": "^4.8.4"
+  },
+  "devDependencies": {
+    "socket.io-client": "^4.8.4"
+  }
+}

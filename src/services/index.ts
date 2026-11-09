@@ -8,7 +8,8 @@
  * Úsalos en componentes con el hook `useService` (src/hooks/useService.ts).
  */
 import * as db from '../mocks/data'
-import type { Grabacion, Mensaje, ResumenInicio, SesionVoz } from '../types'
+import { normalizar, terminos } from '../lib/texto'
+import type { Grabacion, Mensaje, ResumenInicio } from '../types'
 import { servidoresDe, uidDe } from './firestore/vistas'
 import { simular } from './simular'
 
@@ -19,21 +20,13 @@ export { serverService } from './servidores'
 export { memberService } from './miembros'
 export { channelService } from './canales'
 export { enlaceInvitacion, inviteService } from './invitaciones'
+// sesiones de voz y transcripciones en firestore (TW 17)
+export { sessionService } from './sesiones'
+export { normalizar, terminos }
 
 /* ---------- Mensajes ---------- */
 export const messageService = {
   getByChannel: (canalId: string): Promise<Mensaje[]> => simular(db.mensajes.filter((m) => m.canalId === canalId)),
-}
-
-/* ---------- Sesiones de voz y transcripciones ---------- */
-export const sessionService = {
-  getByServer: (servidorId: string): Promise<SesionVoz[]> => simular(db.sesiones.filter((s) => s.servidorId === servidorId)),
-  getById: (sesionId: string) => simular(db.sesiones.find((s) => s.sesionId === sesionId) ?? null),
-  getSegments: (sesionId: string) => simular(db.segmentos.filter((g) => g.sesionId === sesionId)),
-  getConsents: (sesionId: string) => simular(db.consentimientos.filter((c) => c.sesionId === sesionId)),
-  speakingTime: (sesionId: string): Record<string, string> => db.tiempoHablado[sesionId] ?? {},
-  /** Total de sesiones del servidor (para la paginación del historial). */
-  total: (servidorId: string): number => db.totalSesiones[servidorId] ?? db.sesiones.filter((s) => s.servidorId === servidorId).length,
 }
 
 /* ---------- Grabaciones ---------- */
@@ -55,15 +48,6 @@ const deMisServidores = <T extends { ruta: string }>(items: T[]): T[] => {
 export const activityService = {
   getRecent: () => simular(deMisServidores(db.actividad)),
 }
-
-/** Quita acentos y pasa a minúsculas conservando la longitud del texto. */
-export const normalizar = (s: string) => Array.from(s, (ch) => ch.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()).join('')
-
-/** Palabras con significado de una consulta ("permisos del micrófono" → permisos, microfono). */
-export const terminos = (q: string) =>
-  normalizar(q)
-    .split(/\s+/)
-    .filter((w) => w.length > 3)
 
 export const searchService = {
   /** Búsqueda simulada sobre mensajes y transcripciones, ordenada por relevancia. */

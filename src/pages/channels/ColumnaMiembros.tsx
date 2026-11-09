@@ -1,3 +1,4 @@
+import { useLlamadasServidor } from '../../hooks/useLlamadasServidor'
 import { Headphones } from 'lucide-react'
 import Avatar from '../../components/ui/Avatar'
 import { useService } from '../../hooks/useService'
@@ -18,10 +19,11 @@ interface Persona {
 export default function ColumnaMiembros({ servidorId }: { servidorId: string }) {
   const { data: miembros } = useService(() => memberService.getByServer(servidorId), [servidorId])
 
-  // Quién está en cada canal de voz del servidor.
+  // Quién está en cada canal de voz del servidor (en tiempo real).
+  const llamadas = useLlamadasServidor(servidorId)
   const llamada = new Map<string, string>()
   for (const c of channelService.listByServer(servidorId).filter((c) => c.tipo === 'voz')) {
-    for (const uid of channelService.inCall(c.canalId)) llamada.set(uid, c.nombre)
+    for (const p of llamadas[c.canalId] ?? []) llamada.set(p.uid, c.nombre)
   }
 
   const personas: Persona[] = (miembros ?? [])

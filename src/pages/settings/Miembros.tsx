@@ -1,3 +1,4 @@
+import { useLlamadasServidor } from '../../hooks/useLlamadasServidor'
 import { Search, ShieldCheck } from 'lucide-react'
 import { useState } from 'react'
 import { useNavigate, useParams } from 'react-router'
@@ -8,7 +9,7 @@ import { useService } from '../../hooks/useService'
 import { cn } from '../../lib/cn'
 import { puedeCambiarRol, puedeRetirar } from '../../lib/permisos'
 import { rutas } from '../../lib/routes'
-import { channelService, manejarError, memberService, normalizar, userService } from '../../services'
+import { manejarError, memberService, normalizar, userService } from '../../services'
 import { useAuthStore } from '../../store/authStore'
 import { useUiStore } from '../../store/uiStore'
 import type { Miembro, Usuario } from '../../types'
@@ -34,7 +35,9 @@ export default function Miembros() {
   const [retirando, setRetirando] = useState<string | null>(null)
   const [ocupado, setOcupado] = useState<string | null>(null)
 
-  const enLlamada = new Set(channelService.listByServer(serverId).flatMap((c) => channelService.inCall(c.canalId)))
+  // se vuelve a pintar cuando alguien entra o sale de una llamada
+  const llamadas = useLlamadasServidor(serverId)
+  const enLlamada = new Set(Object.values(llamadas).flatMap((ps) => ps.map((p) => p.uid)))
 
   const q = normalizar(busqueda.trim())
   const filas = (miembros ?? [])

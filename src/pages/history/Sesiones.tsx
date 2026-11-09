@@ -35,10 +35,10 @@ export default function Sesiones() {
   const [pagina, setPagina] = useState(1)
 
   const canalesVoz = channelService.listByServer(serverId).filter((c) => c.tipo === 'voz')
-  const total = sessionService.total(serverId)
+  const total = data?.length ?? 0
   const paginas = Math.max(1, Math.ceil(total / POR_PAGINA))
 
-  // Filtros locales sobre los datos de ejemplo.
+  // filtros locales sobre las sesiones que llegaron de firestore
   const q = normalizar(busqueda.trim())
   const sesiones = (data ?? []).filter((s) => {
     if (canal && s.canalId !== canal) return false
@@ -48,6 +48,8 @@ export default function Sesiones() {
     return nombres.some((n) => normalizar(n).includes(q))
   })
   const filtrando = Boolean(q || canal || grabacion)
+  // con filtros se ven todas las coincidencias, sin filtros se pagina
+  const visibles = filtrando ? sesiones : sesiones.slice((pagina - 1) * POR_PAGINA, pagina * POR_PAGINA)
 
   return (
     <div className="flex flex-col gap-6 px-12 pt-9 pb-8">
@@ -121,7 +123,7 @@ export default function Sesiones() {
                 </tr>
               ))}
             {!loading &&
-              sesiones.map((s) => (
+              visibles.map((s) => (
                 <tr
                   key={s.sesionId}
                   onClick={() => navigate(rutas.sesion(serverId, s.sesionId))}
@@ -142,7 +144,9 @@ export default function Sesiones() {
               ))}
             {!loading && sesiones.length === 0 && (
               <tr className="border-t border-line">
-                <td colSpan={7} className="px-5 py-12 text-center text-muted">Ninguna sesión coincide con los filtros.</td>
+                <td colSpan={7} className="px-5 py-12 text-center text-muted">
+                  {total === 0 ? 'Todavía no hay sesiones de voz en este servidor. Aparecerán aquí cuando alguien entre a un canal de voz.' : 'Ninguna sesión coincide con los filtros.'}
+                </td>
               </tr>
             )}
           </tbody>
@@ -151,7 +155,11 @@ export default function Sesiones() {
 
       <footer className="flex flex-wrap items-center justify-between gap-3 text-small text-muted">
         <p>
-          {filtrando ? `${sesiones.length} sesiones coinciden con los filtros` : `Mostrando ${(pagina - 1) * POR_PAGINA + 1}–${Math.min(pagina * POR_PAGINA, total)} de ${total} sesiones`}
+          {filtrando
+            ? `${sesiones.length} sesiones coinciden con los filtros`
+            : total === 0
+              ? 'Sin sesiones'
+              : `Mostrando ${(pagina - 1) * POR_PAGINA + 1}–${Math.min(pagina * POR_PAGINA, total)} de ${total} sesiones`}
         </p>
         <nav aria-label="Paginación" className="flex items-center gap-1.5">
           <BotonPagina onClick={() => setPagina((p) => p - 1)} disabled={pagina === 1}>

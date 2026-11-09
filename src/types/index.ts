@@ -85,6 +85,15 @@ export interface SesionVoz {
   grabacion: 'grabada' | 'procesando' | 'sin-grabacion'
 }
 
+/** Persona dentro de una sala de voz, tal como la manda el servidor de Socket.io. */
+export interface ParticipanteLlamada {
+  uid: string
+  silenciado: boolean
+  hablando: boolean
+  /** Perdió la conexión y el servidor le guarda el lugar unos segundos. */
+  reconectando: boolean
+}
+
 export interface Segmento {
   segmentoId: string
   sesionId: string

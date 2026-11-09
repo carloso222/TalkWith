@@ -61,6 +61,9 @@ export const mockFirestore = {
   collection: (base: unknown, ...partes: string[]) => ({ path: ruta(base, partes) }),
   collectionGroup: (_db: unknown, id: string) => ({ path: id, grupo: true, filtros: [] as unknown[] }),
   where: (campo: string, op: string, valor: unknown) => ({ campo, op, valor }),
+  orderBy: (campo: string, direccion = 'asc') => ({ orden: campo, direccion }),
+  limit: (n: number) => ({ limite: n }),
+  increment: (n: number) => ({ incremento: n }),
   query: (ref: { path: string; grupo?: boolean; filtros?: unknown[] }, ...filtros: unknown[]) => ({ ...ref, filtros }),
   doc: (base: unknown, ...partes: string[]) => {
     const p = ruta(base, partes)
@@ -74,6 +77,16 @@ export const mockFirestore = {
     registro.lecturas.push(ref.path)
     const datos = registro.docs.get(ref.path) ?? null
     return { id: ref.path.split('/').pop(), exists: () => datos !== null, data: () => datos ?? undefined }
+  },
+  /** Documentos hijos directos de la colección, en el orden en que se guardaron en `registro.docs`. */
+  getDocs: async (ref: { path: string }) => {
+    fallarSiToca()
+    registro.lecturas.push(ref.path)
+    const prefijo = `${ref.path}/`
+    const docs = [...registro.docs.entries()]
+      .filter(([p, datos]) => datos !== null && p.startsWith(prefijo) && !p.slice(prefijo.length).includes('/'))
+      .map(([p, datos]) => ({ id: p.split('/').pop()!, exists: () => true, data: () => datos! }))
+    return { docs }
   },
   setDoc: async (ref: { path: string }, datos: Datos) => {
     fallarSiToca()
@@ -91,6 +104,7 @@ export const mockFirestore = {
     const lista: Escritura[] = []
     return {
       set: (ref: { path: string }, datos: Datos) => void lista.push({ op: 'set', ruta: ref.path, datos }),
+      update: (ref: { path: string }, datos: Datos) => void lista.push({ op: 'update', ruta: ref.path, datos }),
       commit: async () => {
         fallarSiToca()
         registro.batches.push(lista)

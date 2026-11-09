@@ -18,6 +18,8 @@ npm run build    # revisa tipos y genera dist/
 npm run lint
 ```
 
+Las salas de voz necesitan el servidor de Socket.io de la carpeta `server/` (TW 05). Mira cómo correrlo en [server/README.md](server/README.md).
+
 Para entrar a la app, pulsa **Continuar con Google** en `/login`. Es un inicio de sesión simulado.
 
 ## Tecnologías
@@ -51,7 +53,7 @@ La entrega usa términos de Angular. En React se cubren así:
 |---|---|
 | Componentes | `src/components` y `src/pages` |
 | Directivas | Hooks personalizados en `src/hooks` y el componente `<Can roles={[...]}>`, que muestra u oculta contenido según el rol (como un `*ngIf` de permisos) |
-| Servicios | `src/services`: devuelven datos de `mocks/` en una Promise. En la siguiente entrega solo cambia su contenido por Firebase y Socket.io |
+| Servicios | `src/services`: servidores, miembros, canales, invitaciones y sesiones de voz viven en Firestore; las salas de voz usan Socket.io (`server/`). El resto todavía devuelve datos de `mocks/` en una Promise |
 | Guardias / Middlewares | `src/guards`: `ProtectedRoute` (sesión), `GuestRoute` (ya hay sesión), `MemberGuard` (pertenece al servidor) y `RoleGuard` (propietario o admin) |
 | Rutas | `src/routes/AppRouter.tsx` con React Router |
 | Mensajes de confirmación | `useUiStore().confirm({...})`. Nunca borra nada: al aceptar solo se muestra un toast |

@@ -3,6 +3,7 @@ import { db } from '../lib/firebase'
 import { validarCanal, type DatosCanal } from '../lib/validaciones'
 import * as mocks from '../mocks/data'
 import { useDatosStore } from '../store/datosStore'
+import { enLlamada } from '../store/llamadasStore'
 import type { Canal } from '../types'
 import { ApiError } from './errores'
 import { aApiError } from './firestore/errores'
@@ -95,8 +96,9 @@ export const channelService = {
   },
   listByServer: (servidorId: string): Canal[] => listar(servidorId),
   find: (canalId: string): Canal | undefined => buscar(canalId),
-  inCall: (canalId: string): string[] => mocks.enLlamada[canalId] ?? [],
-  isMuted: (uid: string): boolean => mocks.silenciados.includes(uid),
+  // quien esta en llamada lo manda el servidor de socket.io
+  inCall: (canalId: string): string[] => enLlamada(canalId).map((p) => p.uid),
+  isMuted: (uid: string, canalId: string): boolean => enLlamada(canalId).some((p) => p.uid === uid && p.silenciado),
   /** Menciones al usuario en un canal, contadas a partir de los mensajes. */
   mentions: (canalId: string, uid?: string): number =>
     mocks.mensajes.filter((m) => m.canalId === canalId && m.menciones?.includes(uidDe(uid))).length,

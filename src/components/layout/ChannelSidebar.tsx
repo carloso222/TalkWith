@@ -2,6 +2,7 @@ import { ChevronDown, Hash, Headphones, Lock, MicOff, Plus, Settings } from 'luc
 import { useState } from 'react'
 import { Link, NavLink } from 'react-router'
 import Can from '../../guards/Can'
+import { useLlamadasServidor } from '../../hooks/useLlamadasServidor'
 import { cn } from '../../lib/cn'
 import { rutas } from '../../lib/routes'
 import { channelService, serverService, userService } from '../../services'
@@ -14,6 +15,8 @@ export default function ChannelSidebar({ serverId }: { serverId: string }) {
   const canales = channelService.listByServer(serverId)
   const texto = canales.filter((c) => c.tipo === 'texto')
   const voz = canales.filter((c) => c.tipo === 'voz')
+  // quien esta en cada canal de voz, en tiempo real
+  const llamadas = useLlamadasServidor(serverId)
 
   // Secciones abiertas/cerradas (solo en memoria).
   const [abiertas, setAbiertas] = useState({ texto: true, voz: true })
@@ -56,11 +59,11 @@ export default function ChannelSidebar({ serverId }: { serverId: string }) {
               <Headphones className="size-[18px] shrink-0" />
               <span className="truncate">{c.nombre}</span>
             </NavLink>
-            {channelService.inCall(c.canalId).map((uid) => (
-              <div key={uid} className="flex h-[30px] items-center gap-2 pr-2 pl-[34px] text-small text-muted">
-                <Avatar uid={uid} size="xs" />
-                <span className="flex-1 truncate">{userService.find(uid)?.nombre}</span>
-                {channelService.isMuted(uid) && <MicOff className="size-3.5 text-recording" aria-label="Silenciado" />}
+            {(llamadas[c.canalId] ?? []).map((p) => (
+              <div key={p.uid} className={cn('flex h-[30px] items-center gap-2 pr-2 pl-[34px] text-small text-muted', p.reconectando && 'opacity-50')}>
+                <Avatar uid={p.uid} size="xs" />
+                <span className="flex-1 truncate">{userService.find(p.uid)?.nombre}</span>
+                {p.silenciado && <MicOff className="size-3.5 text-recording" aria-label="Silenciado" />}
               </div>
             ))}
           </div>

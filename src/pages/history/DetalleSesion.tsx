@@ -25,8 +25,8 @@ export default function DetalleSesion() {
   const [params, setParams] = useSearchParams()
   const pestana: Pestana = params.get('tab') === 'grabacion' ? 'grabacion' : 'transcripcion'
 
-  const { data: sesion, loading } = useService(() => sessionService.getById(sessionId), [sessionId])
-  const { data: segmentos } = useService(() => sessionService.getSegments(sessionId), [sessionId])
+  const { data: sesion, loading } = useService(() => sessionService.getById(serverId, sessionId), [serverId, sessionId])
+  const { data: segmentos } = useService(() => sessionService.getSegments(serverId, sessionId), [serverId, sessionId])
   const { data: grabacion } = useService(() => recordingService.getBySession(sessionId), [sessionId])
 
   const canal = sesion ? channelService.find(sesion.canalId) : undefined

@@ -1,7 +1,6 @@
 import { AudioLines, Mic, MicOff, SignalHigh, SignalMedium } from 'lucide-react'
 import { cn } from '../../lib/cn'
 import { userService } from '../../services'
-import { voiceService } from '../../services/voiceService'
 
 interface Props {
   uid: string
@@ -11,6 +10,8 @@ interface Props {
   seleccionado: boolean
   /** Texto del subtítulo que se muestra sobre la etiqueta (si hay). */
   subtitulo?: string
+  /** Perdio la conexion y el servidor le guarda el lugar. */
+  reconectando?: boolean
 }
 
 /** Parte un subtítulo largo en dos tonos: lo reciente arriba, lo anterior atenuado (Figma 12). */
@@ -22,32 +23,31 @@ function partirSubtitulo(texto: string): [string, string] {
 }
 
 /** Tarjeta de una persona en la llamada: avatar grande, señal, subtítulo y estado. */
-export default function ParticipantTile({ uid, esYo, silenciado, hablando, seleccionado, subtitulo }: Props) {
+export default function ParticipantTile({ uid, esYo, silenciado, hablando, seleccionado, subtitulo, reconectando }: Props) {
   const usuario = userService.find(uid)
   if (!usuario) return null
 
-  const senal = voiceService.signal(uid)
+  const senal = reconectando ? 'media' : 'buena'
   const Senal = senal === 'buena' ? SignalHigh : SignalMedium
   const [principal, anterior] = subtitulo ? partirSubtitulo(subtitulo) : ['', '']
 
-  const estado = silenciado
-    ? { texto: 'Silenciado', clase: 'text-recording', icono: null }
-    : hablando
-      ? { texto: 'Hablando', clase: 'text-voice', icono: AudioLines }
-      : seleccionado
-        ? { texto: 'Seleccionado', clase: 'text-indigo-300', icono: null }
-        : null
+  let estado: { texto: string; clase: string; icono: typeof AudioLines | null } | null = null
+  if (reconectando) estado = { texto: 'Reconectando…', clase: 'text-warning', icono: null }
+  else if (silenciado) estado = { texto: 'Silenciado', clase: 'text-recording', icono: null }
+  else if (hablando) estado = { texto: 'Hablando', clase: 'text-voice', icono: AudioLines }
+  else if (seleccionado) estado = { texto: 'Seleccionado', clase: 'text-indigo-300', icono: null }
 
   return (
     <div
       className={cn(
         'relative flex min-h-0 items-center justify-center rounded-xl border-2 bg-panel transition-colors',
+        reconectando && 'opacity-60',
         hablando && !silenciado ? 'border-voice' : seleccionado ? 'border-primary' : 'border-line',
       )}
     >
       <Senal
         className={cn('absolute top-3 right-3 size-3.5', senal === 'buena' ? 'text-online' : 'text-warning')}
-        aria-label={senal === 'buena' ? 'Conexión buena' : 'Conexión media'}
+        aria-label={senal === 'buena' ? 'Conexión buena' : 'Conexión inestable'}
       />
 
       <div

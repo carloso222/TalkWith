@@ -4,8 +4,10 @@ import { detenerEscuchas, iniciarEscuchas } from '../services/firestore/escuchas
 import { asegurarPerfil } from '../services/perfilService'
 import { useAuthStore } from '../store/authStore'
 import { useDatosStore } from '../store/datosStore'
+import { useLlamadasStore } from '../store/llamadasStore'
 import { useUiStore } from '../store/uiStore'
 import { useVoiceStore } from '../store/voiceStore'
+import { desconectarSocket } from './socket'
 
 /** Clave que usaba la sesión simulada; se borra por si quedó de una versión anterior. */
 const CLAVE_SESION_ANTIGUA = 'talkwith-auth'
@@ -13,6 +15,8 @@ const CLAVE_SESION_ANTIGUA = 'talkwith-auth'
 /** Deja la app sin rastro de la sesión anterior: detiene las escuchas de Firestore y vacía la caché. */
 export function limpiarEstadoLocal(): void {
   detenerEscuchas()
+  desconectarSocket()
+  useLlamadasStore.getState().limpiar()
   useDatosStore.getState().limpiar()
   useAuthStore.getState().limpiar()
   useVoiceStore.setState(useVoiceStore.getInitialState(), true)

@@ -1,7 +1,7 @@
-import { Loader2 } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router'
 import AjustesAudio from './AjustesAudio'
+import AvisoConexion from './AvisoConexion'
 import AvisoMicrofono from './AvisoMicrofono'
 import CallHeader from './CallHeader'
 import ControlBar from './ControlBar'
@@ -11,24 +11,22 @@ import RecordingDialog from './RecordingDialog'
 import TranscriptPanel from './TranscriptPanel'
 import { useMicrofono } from '../../hooks/useMicrofono'
 import { useRecordingFlow } from '../../hooks/useRecordingFlow'
-import { useService } from '../../hooks/useService'
+import { useSalaVoz } from '../../hooks/useSalaVoz'
 import { useSubtitlesAvailable } from '../../hooks/useSubtitlesAvailable'
 import { cn } from '../../lib/cn'
-import { aSegundos, formatear } from '../../lib/time'
+import { formatear } from '../../lib/time'
 import { rutas } from '../../lib/routes'
 import { channelService, sessionService } from '../../services'
-import { voiceService } from '../../services/voiceService'
 import { useAuthStore } from '../../store/authStore'
 import { useUiStore } from '../../store/uiStore'
-import type { Canal, Segmento, SesionVoz } from '../../types'
-
-/** Segmentos que ya están "dichos" al entrar a la sala (coincide con el Figma). */
-const SEGMENTOS_INICIALES = 4
-const NUEVO_SEGMENTO_CADA_MS = 8000
+import type { Canal, Segmento } from '../../types'
 
 /**
  * Canal de voz (Figma 12–16): cuadrícula de participantes, controles flotantes,
  * transcripción en vivo y flujo de grabación con consentimiento.
+ *
+ * Los participantes llegan del servidor de socket.io (TW 12 y 14) y la
+ * transcripcion se lee de firestore en vivo (TW 17).
  *
  * Estados de demo por URL (?demo=…):
  *   sin-subtitulos → Figma 13     rechazo → Figma 14
@@ -44,54 +42,46 @@ export default function VoiceChannel({ canal }: { canal: Canal }) {
   const notify = useUiStore((s) => s.notify)
   const confirm = useUiStore((s) => s.confirm)
 
-  const participantes = useMemo(() => voiceService.participants(canal.canalId, yoUid), [canal.canalId, yoUid])
-  const sesionId = voiceService.liveSessionId(canal.canalId)
-
-  const { data: sesion, loading } = useService<SesionVoz | null>(() => (sesionId ? sessionService.getById(sesionId) : Promise.resolve(null)), [sesionId])
-  const { data: todos } = useService<Segmento[]>(() => (sesionId ? sessionService.getSegments(sesionId) : Promise.resolve([])), [sesionId])
-
   const mic = useMicrofono()
+  const sala = useSalaVoz(serverId, canal.canalId, { silenciado: mic.silenciado, hablando: mic.hablando })
+
+  // siempre te ves a ti aunque todavia no haya conexion con el servidor
+  const participantes = useMemo(() => {
+    const ids = sala.participantes.map((p) => p.uid)
+    return !yoUid || ids.includes(yoUid) ? ids : [...ids, yoUid]
+  }, [sala.participantes, yoUid])
+  const datosDe = (uid: string) => sala.participantes.find((p) => p.uid === uid)
+
   const [ajustesAbiertos, setAjustesAbiertos] = useState(false)
   const [subtitulosActivos, setSubtitulosActivos] = useState(true)
   const [panelAbierto, setPanelAbierto] = useState(true)
-  const [visibles, setVisibles] = useState(SEGMENTOS_INICIALES)
-  // undefined = selección por defecto (la tercera intervención, como en Figma); null = ninguna.
-  const [seleccion, setSeleccion] = useState<string | null | undefined>(undefined)
-  const [extra, setExtra] = useState(0)
+  const [seleccion, setSeleccion] = useState<string | null>(null)
+  const [todos, setTodos] = useState<Segmento[]>([])
+  const [ahora, setAhora] = useState(() => Date.now())
 
   const disponibles = useSubtitlesAvailable(demo === 'sin-subtitulos')
   const grabacion = useRecordingFlow({ yoUid, participantes, demo })
 
-  // Cronómetro de la llamada: parte de la duración que trae la sesión.
+  // cronometro de la llamada
   useEffect(() => {
-    const t = setInterval(() => setExtra((e) => e + 1), 1000)
+    const t = setInterval(() => setAhora(Date.now()), 1000)
     return () => clearInterval(t)
   }, [])
 
-  // Transcripción "en vivo": cada cierto tiempo llega la siguiente intervención.
-  const total = todos?.length ?? 0
+  // transcripcion en vivo de la sesion actual
   useEffect(() => {
-    if (!disponibles || visibles >= total) return
-    const t = setTimeout(() => setVisibles((v) => v + 1), NUEVO_SEGMENTO_CADA_MS)
-    return () => clearTimeout(t)
-  }, [disponibles, visibles, total])
+    if (!sala.sesionId) return
+    return sessionService.listenSegments(serverId, sala.sesionId, setTodos)
+  }, [serverId, sala.sesionId])
 
-  if (loading && sesionId) {
-    return (
-      <div className="flex h-full items-center justify-center gap-2 text-small text-muted">
-        <Loader2 className="size-4 animate-spin" /> Conectando a {canal.nombre}…
-      </div>
-    )
-  }
-
-  const segmentos = disponibles ? (todos ?? []).slice(0, visibles) : []
+  const segmentos = disponibles && sala.sesionId ? todos : []
   const ultimo = segmentos[segmentos.length - 1]
-  const seleccionadoId = seleccion === undefined ? (segmentos[2]?.segmentoId ?? null) : seleccion
-  const segSeleccionado = segmentos.find((g) => g.segmentoId === seleccionadoId)
+  const segSeleccionado = segmentos.find((g) => g.segmentoId === seleccion)
+  const seleccionadoId = segSeleccionado ? seleccion : null
   const subtitulosVisibles = subtitulosActivos && disponibles
 
-  const tiempo = formatear((sesion ? aSegundos(sesion.duracion) : 0) + extra)
-  const estaSilenciado = (uid: string) => (uid === yoUid ? mic.silenciado : voiceService.isMuted(uid))
+  const tiempo = formatear(sala.inicio ? Math.max(0, Math.floor((ahora - sala.inicio) / 1000)) : 0)
+  const estaSilenciado = (uid: string) => (uid === yoUid ? mic.silenciado : Boolean(datosDe(uid)?.silenciado))
 
   const alternarMicrofono = () => {
     if (mic.listo) {
@@ -164,21 +154,25 @@ export default function VoiceChannel({ canal }: { canal: Canal }) {
           onPanel={() => setPanelAbierto((v) => !v)}
         />
         {grabacion.fase === 'grabando' && <RecordingBanner tiempo={formatear(grabacion.segundos)} />}
+        <AvisoConexion estado={sala.estado} error={sala.error} onReintentar={sala.reintentar} />
         <AvisoMicrofono estado={mic.estado} onReintentar={mic.reintentar} />
 
         <div className="min-h-0 flex-1 px-6 pt-6 pb-28">
           <div className={cn('grid h-full auto-rows-fr gap-4', participantes.length === 1 ? 'mx-auto max-w-3xl grid-cols-1' : participantes.length > 4 ? 'grid-cols-3' : 'grid-cols-2')}>
             {participantes.map((uid) => {
               const silenciado = estaSilenciado(uid)
-              // tu tarjeta usa el nivel real del microfono, las demas la transcripcion
-              const hablando = uid === yoUid ? mic.hablando : !silenciado && ultimo?.hablanteUid === uid
+              // tu tarjeta usa el nivel real del microfono, las demas lo que avisa el servidor
+              const hablando = uid === yoUid ? mic.hablando : !silenciado && Boolean(datosDe(uid)?.hablando)
+              const reconectando = uid === yoUid ? sala.estado === 'reconectando' : Boolean(datosDe(uid)?.reconectando)
               const seleccionado = subtitulosVisibles && segSeleccionado?.hablanteUid === uid
               let subtitulo: string | undefined
               if (subtitulosVisibles) {
                 if (seleccionado) subtitulo = segSeleccionado?.texto
-                else if (hablando) subtitulo = ultimo?.texto
+                else if (ultimo?.hablanteUid === uid) subtitulo = ultimo.texto
               }
-              return <ParticipantTile key={uid} uid={uid} esYo={uid === yoUid} silenciado={silenciado} hablando={hablando} seleccionado={seleccionado} subtitulo={subtitulo} />
+              return (
+                <ParticipantTile key={uid} uid={uid} esYo={uid === yoUid} silenciado={silenciado} hablando={hablando} seleccionado={seleccionado} subtitulo={subtitulo} reconectando={reconectando} />
+              )
             })}
           </div>
         </div>
@@ -203,7 +197,7 @@ export default function VoiceChannel({ canal }: { canal: Canal }) {
           onSeleccionar={(id) => setSeleccion(id === seleccionadoId ? null : id)}
           onCerrar={() => setPanelAbierto(false)}
           disponible={disponibles}
-          enVivo={Boolean(sesionId)}
+          enVivo={Boolean(sala.sesionId)}
           onRevisarPermisos={revisarPermisos}
         />
       )}
