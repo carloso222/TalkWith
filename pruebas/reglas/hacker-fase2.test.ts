@@ -94,6 +94,23 @@ describe('roles: casos del Hacker', () => {
   })
 })
 
+describe('S5: grupo acotado a texto de 1 a 40 caracteres', () => {
+  const editar = (quien: string, objetivo: string, cambios: Record<string, unknown>) =>
+    updateDoc(doc(db(quien), `servidores/A/miembros/${objetivo}`), cambios)
+
+  it('acepta un grupo de texto hasta 40 caracteres (admin y propietario)', async () => {
+    await assertSucceeds(editar('admin', 'ana', { grupo: 'Diseño' }))
+    await assertSucceeds(editar('dueno', 'luis', { grupo: 'x'.repeat(40) }))
+  })
+
+  it('rechaza un grupo que no es texto, vacío o de más de 40 caracteres', async () => {
+    for (const grupo of [123, true, ['a'], { a: 1 }, '', 'x'.repeat(41)]) {
+      await assertFails(editar('admin', 'ana', { grupo }))
+      await assertFails(editar('dueno', 'luis', { grupo, rol: 'admin' }))
+    }
+  })
+})
+
 describe('canales: un miembro raso no los gestiona', () => {
   it('crear, editar y borrar como miembro se rechaza', async () => {
     const c = db('ana')

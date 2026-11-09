@@ -123,7 +123,10 @@ function alCambiarMembresias(todos: Set<string>, confirmados: Set<string>): void
 /** Empieza a escuchar los datos de `uid`. Es idempotente para el mismo uid. */
 export function iniciarEscuchas(uid: string): void {
   if (uidActual === uid) return
+  const cambioDeCuenta = uidActual !== null
   detenerEscuchas()
+  // De la cuenta A a la B sin un `null` intermedio: no debe quedar nada de A en la caché.
+  if (cambioDeCuenta) datos().limpiar()
   uidActual = uid
   const miGeneracion = ++generacion
   datos().ponerEstado('cargando')
