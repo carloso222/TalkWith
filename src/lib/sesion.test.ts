@@ -22,6 +22,7 @@ vi.mock('../services/firestore/escuchas', () => ({
   detenerEscuchas: srv.detenerEscuchas,
 }))
 
+import { ApiError, manejarError, MENSAJE_SESION_EXPIRADA } from '../services/errores'
 import { useAuthStore } from '../store/authStore'
 import { useDatosStore } from '../store/datosStore'
 import { useUiStore } from '../store/uiStore'
@@ -102,5 +103,50 @@ describe('iniciarEscuchaSesion', () => {
     resolver({ usuario: ana, perfilCompleto: true })
     await p
     expect(useAuthStore.getState().estado).toBe('anonimo')
+  })
+})
+
+describe('sesión perdida y 401', () => {
+  const entrar = async () => {
+    srv.asegurarPerfil.mockResolvedValue({ usuario: ana, perfilCompleto: true })
+    await srv.oyente!({ uid: 'u1' } as User)
+  }
+
+  beforeEach(() => {
+    srv.cerrarSesion.mockClear()
+    useAuthStore.getState().limpiar()
+    useAuthStore.getState().setAvisoLogin(null)
+    iniciarEscuchaSesion()
+  })
+
+  it('si la sesión se pierde sin cerrarla, deja el aviso para el login', async () => {
+    await entrar()
+    await srv.oyente!(null)
+    expect(useAuthStore.getState()).toMatchObject({ estado: 'anonimo', avisoLogin: MENSAJE_SESION_EXPIRADA })
+  })
+
+  it('al cerrar sesión a propósito no hay aviso', async () => {
+    await entrar()
+    await useAuthStore.getState().logout()
+    await srv.oyente!(null)
+    expect(useAuthStore.getState()).toMatchObject({ estado: 'anonimo', avisoLogin: null, cerrandoSesion: false })
+  })
+
+  it('al entrar de nuevo se borra el aviso', async () => {
+    await entrar()
+    await srv.oyente!(null)
+    await entrar()
+    expect(useAuthStore.getState().avisoLogin).toBeNull()
+  })
+
+  it('un 401 en manejarError cierra la sesión', async () => {
+    await entrar()
+    manejarError(new ApiError(401, MENSAJE_SESION_EXPIRADA))
+    expect(srv.cerrarSesion).toHaveBeenCalledTimes(1)
+  })
+
+  it('un 401 sin sesión no hace nada', () => {
+    manejarError(new ApiError(401, MENSAJE_SESION_EXPIRADA))
+    expect(srv.cerrarSesion).not.toHaveBeenCalled()
   })
 })

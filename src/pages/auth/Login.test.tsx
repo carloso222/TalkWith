@@ -1,7 +1,7 @@
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const firebase = vi.hoisted(() => ({
   signInWithPopup: vi.fn(),
@@ -20,6 +20,8 @@ vi.mock('firebase/auth', () => ({
 }))
 
 import { GoogleAuthProvider } from 'firebase/auth'
+import { MENSAJE_SESION_EXPIRADA } from '../../services/errores'
+import { useAuthStore } from '../../store/authStore'
 import Login from './Login'
 
 const abrir = () => render(<MemoryRouter><Login /></MemoryRouter>)
@@ -138,6 +140,24 @@ describe('Login', () => {
       await userEvent.click(screen.getByRole('button', { name: /olvidaste tu contraseña/i }))
       expect(await screen.findByRole('alert')).toHaveTextContent(/escribe tu correo/i)
       expect(firebase.sendPasswordResetEmail).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('sesión expirada', () => {
+    afterEach(() => useAuthStore.getState().setAvisoLogin(null))
+
+    it('muestra el aviso que deja la sesión perdida', () => {
+      useAuthStore.getState().setAvisoLogin(MENSAJE_SESION_EXPIRADA)
+      abrir()
+      expect(screen.getByRole('alert')).toHaveTextContent(/tu sesión expiró/i)
+    })
+
+    it('el aviso se quita al volver a intentar entrar', async () => {
+      useAuthStore.getState().setAvisoLogin(MENSAJE_SESION_EXPIRADA)
+      firebase.signInWithPopup.mockRejectedValue({ code: 'auth/popup-closed-by-user' })
+      abrir()
+      await userEvent.click(botonGoogle())
+      await waitFor(() => expect(screen.queryByText(/tu sesión expiró/i)).toBeNull())
     })
   })
 })

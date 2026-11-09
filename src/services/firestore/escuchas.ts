@@ -2,7 +2,9 @@ import { collection, collectionGroup, doc, onSnapshot, query, where, type Unsubs
 import { db } from '../../lib/firebase'
 import { useDatosStore } from '../../store/datosStore'
 import { useUiStore } from '../../store/uiStore'
+import { esSesionInvalida, manejarError } from '../errores'
 import { aCanal, aMiembro, aServidor, ordenarCanales } from './convertidores'
+import { aApiError } from './errores'
 import { detenerPerfiles, sincronizarPerfiles } from './escuchasPerfiles'
 
 /**
@@ -147,8 +149,12 @@ export function iniciarEscuchas(uid: string): void {
       }
       alCambiarMembresias(todos, confirmados)
     },
-    () => {
-      if (miGeneracion === generacion) fallar()
+    (e) => {
+      if (miGeneracion !== generacion) return
+      // sin sesión válida no es un fallo de carga: va al manejo central del 401
+      const error = aApiError(e)
+      if (esSesionInvalida(error)) return manejarError(error)
+      fallar()
     },
   )
 }

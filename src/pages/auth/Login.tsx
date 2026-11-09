@@ -1,4 +1,4 @@
-import { AlertCircle, AudioLines, CheckCircle2, Lock, Mail } from 'lucide-react'
+import { AlertCircle, AudioLines, CheckCircle2, Clock, Lock, Mail } from 'lucide-react'
 import { useState, type FormEvent } from 'react'
 import Button from '../../components/ui/Button'
 import { Field } from '../../components/ui/Field'
@@ -12,6 +12,7 @@ import {
   mensajeErrorAuth,
   restablecerContrasena,
 } from '../../services/authService'
+import { useAuthStore } from '../../store/authStore'
 
 type Modo = 'entrar' | 'crear'
 
@@ -32,6 +33,9 @@ export default function Login() {
   const [cargando, setCargando] = useState<'google' | 'correo' | 'reset' | null>(null)
   const [error, setError] = useState('')
   const [aviso, setAviso] = useState('')
+  // lo deja lib/sesion.ts cuando la sesión expiró o llegó un 401
+  const avisoSesion = useAuthStore((s) => s.avisoLogin)
+  const setAvisoSesion = useAuthStore((s) => s.setAvisoLogin)
 
   const errores = validarAcceso({ correo, contrasena, confirmar }, modo)
   const ver = (e?: string) => (tocado ? e : undefined)
@@ -48,6 +52,7 @@ export default function Login() {
     setCargando('google')
     setError('')
     setAviso('')
+    setAvisoSesion(null)
     try {
       await iniciarSesionConGoogle()
     } catch (e) {
@@ -64,6 +69,7 @@ export default function Login() {
     if (hayErrores(errores)) return
     setCargando('correo')
     setError('')
+    setAvisoSesion(null)
     try {
       if (modo === 'entrar') await iniciarSesionConCorreo(correo, contrasena)
       else await crearCuentaConCorreo(correo, contrasena)
@@ -107,6 +113,11 @@ export default function Login() {
             <h1 className="text-title font-bold">{modo === 'entrar' ? 'Bienvenido a TalkWith' : 'Crea tu cuenta'}</h1>
             <p className="text-muted">Conversa, escucha y recupera lo importante.</p>
           </div>
+          {avisoSesion && (
+            <p role="alert" className="flex items-center gap-2 rounded-[10px] border border-warning/40 bg-warning/10 px-3.5 py-2.5 text-small">
+              <Clock className="size-4 shrink-0 text-warning" /> {avisoSesion}
+            </p>
+          )}
           {error && (
             <p role="alert" className="flex items-center gap-2 rounded-[10px] border border-recording/40 bg-recording/10 px-3.5 py-2.5 text-small text-red-200">
               <AlertCircle className="size-4 shrink-0 text-recording" /> {error}

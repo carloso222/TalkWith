@@ -1,5 +1,6 @@
 import type { Unsubscribe } from 'firebase/auth'
 import { cerrarSesion, escucharSesion } from '../services/authService'
+import { MENSAJE_SESION_EXPIRADA, registrarSesionPerdida } from '../services/errores'
 import { detenerEscuchas, iniciarEscuchas } from '../services/firestore/escuchas'
 import { asegurarPerfil } from '../services/perfilService'
 import { useAuthStore } from '../store/authStore'
@@ -23,13 +24,28 @@ export function limpiarEstadoLocal(): void {
   sessionStorage.removeItem(CLAVE_SESION_ANTIGUA)
 }
 
+/**
+ * Un 401 llegó a `manejarError` (token inválido o sin sesión): se cierra la sesión en Firebase.
+ * El listener ve que se perdió sin que la persona la cerrara, deja el aviso para el login
+ * y `ProtectedRoute` manda a /login recordando la página.
+ */
+function alPerderSesion(): void {
+  if (useAuthStore.getState().estado !== 'autenticado') return
+  cerrarSesion().catch((error) => console.error(error))
+}
+
 /** Une Firebase Auth con los stores. Se llama una sola vez desde `main.tsx`. */
 export function iniciarEscuchaSesion(): Unsubscribe {
   let version = 0
-  return escucharSesion(async (user) => {
+  const quitarManejador401 = registrarSesionPerdida(alPerderSesion)
+  const dejarDeEscuchar = escucharSesion(async (user) => {
     const miVersion = ++version
     if (!user) {
+      // había sesión y nadie pulsó «Cerrar sesión»: expiró, se revocó o llegó un 401
+      const { estado, cerrandoSesion } = useAuthStore.getState()
+      const perdida = estado === 'autenticado' && !cerrandoSesion
       limpiarEstadoLocal()
+      if (perdida) useAuthStore.getState().setAvisoLogin(MENSAJE_SESION_EXPIRADA)
       return
     }
     try {
@@ -44,4 +60,8 @@ export function iniciarEscuchaSesion(): Unsubscribe {
       await cerrarSesion()
     }
   })
+  return () => {
+    quitarManejador401()
+    dejarDeEscuchar()
+  }
 }
