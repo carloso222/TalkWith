@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 vi.mock('../services/authService', () => ({ cerrarSesion: vi.fn() }))
 
 import { useAuthStore } from '../store/authStore'
+import { useDatosStore } from '../store/datosStore'
 import type { Usuario } from '../types'
 import GuestRoute from './GuestRoute'
 import ProtectedRoute from './ProtectedRoute'
@@ -31,7 +32,11 @@ const poner = (estado: 'cargando' | 'anonimo' | 'autenticado', perfilCompleto = 
   useAuthStore.setState({ estado, usuario: estado === 'autenticado' ? ana : null, perfilCompleto })
 
 describe('guardias de sesión', () => {
-  beforeEach(() => poner('cargando', false))
+  beforeEach(() => {
+    useDatosStore.getState().limpiar()
+    useDatosStore.getState().ponerEstado('listo')
+    poner('cargando', false)
+  })
 
   it('cargando: muestra la pantalla de carga y no redirige', () => {
     abrir('/app')

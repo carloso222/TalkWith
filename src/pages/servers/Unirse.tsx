@@ -106,7 +106,9 @@ export default function Unirse() {
               <p className="text-subtitle font-semibold">{servidor.nombre}</p>
               <p className="text-small text-muted">Te invita {userService.find(invitacion.invitaUid)?.nombre}</p>
               <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-caption font-medium">
-                <span className="flex items-center gap-1.5 text-muted"><Users className="size-3.5" /> {servidor.totalMiembros} miembros</span>
+                {servidor.totalMiembros > 0 && (
+                  <span className="flex items-center gap-1.5 text-muted"><Users className="size-3.5" /> {servidor.totalMiembros} miembros</span>
+                )}
                 <span className="flex items-center gap-1.5 text-muted"><span className="size-2 rounded-full bg-online" /> {invitacion.enLinea} en línea</span>
                 <span className="flex items-center gap-1.5 text-voice"><Headphones className="size-3.5" /> {invitacion.enLlamada} en llamada</span>
               </p>

@@ -1,12 +1,15 @@
 import { GoogleAuthProvider, onAuthStateChanged, signInWithPopup, signOut, type Unsubscribe, type User } from 'firebase/auth'
 import { auth } from '../lib/firebase'
+import { detenerEscuchas } from './firestore/escuchas'
 
 /** Abre el popup de Google. */
 export async function iniciarSesionConGoogle(): Promise<void> {
   await signInWithPopup(auth, new GoogleAuthProvider())
 }
 
+/** Cancela las escuchas de Firestore antes de salir, para no recibir errores de permiso al perder la sesión. */
 export function cerrarSesion(): Promise<void> {
+  detenerEscuchas()
   return signOut(auth)
 }
 

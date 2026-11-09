@@ -154,6 +154,11 @@ service cloud.firestore {
           && d.correo == request.auth.token.email;
       }
 
+      // `grupo` es opcional; si está, es texto de 1 a 40 caracteres.
+      function grupoValido(d) {
+        return !('grupo' in d) || texto(d.grupo, 1, 40);
+      }
+
       match /miembros/{uid} {
         allow read: if miembro(sid) || (autenticado() && resource.data.uid == request.auth.uid);
         allow create: if autenticado()
@@ -162,10 +167,12 @@ service cloud.firestore {
         allow update: if (propietario(sid)
             && resource.data.rol != 'propietario'
             && soloCampos(['rol', 'grupo'])
+            && grupoValido(request.resource.data)
             && request.resource.data.rol in ['admin', 'miembro'])
           || (miembro(sid) && rol(sid) == 'admin'
             && resource.data.rol != 'propietario'
-            && soloCampos(['grupo']));
+            && soloCampos(['grupo'])
+            && grupoValido(request.resource.data));
         allow delete: if (autenticado() && uid == request.auth.uid && miembro(sid) && resource.data.rol != 'propietario')
           || (propietario(sid) && resource.data.rol != 'propietario')
           || (miembro(sid) && rol(sid) == 'admin' && resource.data.rol == 'miembro');
@@ -338,7 +345,10 @@ service cloud.firestore {
         && request.resource.data.invitaUid == request.auth.uid
         && request.resource.data.creadaEn == request.time
         && request.resource.data.expiraEn is timestamp
-        && request.resource.data.expiraEn > request.time;
+        && request.resource.data.expiraEn > request.time
+        // Vigencia acotada (la app usa 7 días): una invitación eterna sería una puerta trasera que nadie
+        // puede revocar, porque las invitaciones no se pueden listar.
+        && request.resource.data.expiraEn <= request.time + duration.value(8, 'd');
       allow update: if false;
       allow delete: if gestor(resource.data.servidorId);
     }

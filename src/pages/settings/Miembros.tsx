@@ -1,32 +1,38 @@
-import { ChevronDown, Search, ShieldCheck } from 'lucide-react'
-import { useCallback, useState } from 'react'
-import { useParams } from 'react-router'
+import { Search, ShieldCheck } from 'lucide-react'
+import { useState } from 'react'
+import { useNavigate, useParams } from 'react-router'
 import Avatar from '../../components/ui/Avatar'
 import Badge from '../../components/ui/Badge'
-import Button from '../../components/ui/Button'
-import Can from '../../guards/Can'
-import { useClickOutside } from '../../hooks/useClickOutside'
+import { useCurrentRole } from '../../hooks/useCurrentRole'
 import { useService } from '../../hooks/useService'
 import { cn } from '../../lib/cn'
-import { channelService, memberService, normalizar, userService } from '../../services'
+import { puedeCambiarRol, puedeRetirar } from '../../lib/permisos'
+import { rutas } from '../../lib/routes'
+import { channelService, manejarError, memberService, normalizar, userService } from '../../services'
 import { useAuthStore } from '../../store/authStore'
 import { useUiStore } from '../../store/uiStore'
 import type { Miembro, Usuario } from '../../types'
+import { ETIQUETA_ROL, type RolAsignable } from './etiquetasRol'
+import { ConfirmarRetiro, Estado, SelectorRol } from './MiembrosPiezas'
 import Seccion from './Seccion'
 
-const ROLES_VISIBLES = ['Coordinación', 'Estudiante'] as const
-type RolVisible = (typeof ROLES_VISIBLES)[number]
-
-/** Figma 26 · Miembros. Cambiar rol o retirar solo muestra la confirmación y un toast. */
+/**
+ * Figma 26 · Miembros (TW 07). La persona propietaria asigna administradores; propietario y
+ * administradores retiran según la matriz. Los botones solo reflejan lo que permiten las reglas
+ * de Firestore (`lib/permisos.ts`); las reglas son las que de verdad lo imponen.
+ */
 export default function Miembros() {
   const { serverId = '' } = useParams()
-  const miUid = useAuthStore((s) => s.usuario?.uid)
+  const navigate = useNavigate()
+  const miUid = useAuthStore((s) => s.usuario?.uid) ?? ''
+  const miRol = useCurrentRole()
   const notify = useUiStore((s) => s.notify)
+  const confirm = useUiStore((s) => s.confirm)
   const { data: miembros, loading } = useService(() => memberService.getByServer(serverId), [serverId])
 
   const [busqueda, setBusqueda] = useState('')
-  const [rolesEditados, setRolesEditados] = useState<Record<string, RolVisible>>({})
   const [retirando, setRetirando] = useState<string | null>(null)
+  const [ocupado, setOcupado] = useState<string | null>(null)
 
   const enLlamada = new Set(channelService.listByServer(serverId).flatMap((c) => channelService.inCall(c.canalId)))
 
@@ -38,22 +44,50 @@ export default function Miembros() {
     .sort((a, b) => Number(b.m.rol === 'propietario') - Number(a.m.rol === 'propietario'))
     .filter(({ u }) => !q || normalizar(u.nombre).includes(q) || normalizar(u.correo).includes(q))
 
-  const rolDe = (m: Miembro): RolVisible => rolesEditados[m.uid] ?? (m.grupo === 'Coordinación' ? 'Coordinación' : 'Estudiante')
-
-  const cambiarRol = (u: Usuario, rol: RolVisible) => {
-    setRolesEditados((r) => ({ ...r, [u.uid]: rol }))
-    notify('exito', 'Rol actualizado', `${u.nombre} ahora tiene el rol ${rol}.`)
+  const ejecutar = async (uid: string, accion: () => Promise<void>, error: string) => {
+    setOcupado(uid)
+    try {
+      await accion()
+    } catch (e) {
+      manejarError(e, error)
+    } finally {
+      setOcupado(null)
+    }
   }
+
+  const cambiarRol = (u: Usuario, rol: RolAsignable) =>
+    ejecutar(u.uid, async () => {
+      await memberService.setRole(serverId, u.uid, rol)
+      notify('exito', 'Rol actualizado', `${u.nombre} ahora es ${ETIQUETA_ROL[rol].toLowerCase()}.`)
+    }, 'No se pudo cambiar el rol')
 
   const retirar = (u: Usuario) => {
     setRetirando(null)
-    notify('exito', `${u.nombre} ya no es miembro`, 'Es solo una demostración: no se retiró a nadie.')
+    return ejecutar(u.uid, async () => {
+      await memberService.remove(serverId, u.uid)
+      notify('exito', `${u.nombre} ya no es miembro`)
+    }, 'No se pudo retirar a la persona')
+  }
+
+  const salir = async () => {
+    const ok = await confirm({
+      titulo: '¿Salir del servidor?',
+      descripcion: 'Perderás el acceso a sus canales, mensajes y grabaciones. Podrás volver con una invitación.',
+      confirmar: 'Salir del servidor',
+      peligro: true,
+    })
+    if (!ok) return
+    await ejecutar(miUid, async () => {
+      await memberService.leave(serverId)
+      navigate(rutas.inicio)
+      notify('exito', 'Saliste del servidor')
+    }, 'No se pudo salir del servidor')
   }
 
   return (
     <Seccion
       titulo="Miembros"
-      descripcion={`${miembros?.length ?? '…'} personas. Solo la persona propietaria puede cambiar roles o retirar miembros.`}
+      descripcion={`${miembros?.length ?? '…'} personas. La persona propietaria asigna administradores; propietario y administradores pueden retirar miembros.`}
       accion={
         <label className="relative w-[250px] shrink-0">
           <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted" />
@@ -83,108 +117,61 @@ export default function Miembros() {
               <td colSpan={5} className="py-6"><div className="h-6 animate-pulse rounded bg-raised" /></td>
             </tr>
           )}
-          {filas.map(({ m, u }) => (
-            <tr key={m.uid} className={cn('h-[58px] border-b border-line text-small transition-colors', retirando === u.uid && 'bg-recording/5')}>
-              <td className="pl-3">
-                <span className="flex items-center gap-2.5 text-body font-medium">
-                  <Avatar uid={u.uid} size="sm" />
-                  {u.nombre}
-                  {u.uid === miUid && ' (tú)'}
-                </span>
-              </td>
-              <td className="text-muted">{u.correo}</td>
-              <td>
-                {m.rol === 'propietario' ? (
-                  <Badge tone="warning" icon={<ShieldCheck className="size-3.5" />}>Propietario</Badge>
-                ) : (
-                  <Can roles={['propietario']} fallback={<span className="text-muted">{rolDe(m)}</span>}>
-                    <SelectorRol valor={rolDe(m)} nombre={u.nombre} onChange={(r) => cambiarRol(u, r)} />
-                  </Can>
-                )}
-              </td>
-              <td><Estado usuario={u} enLlamada={enLlamada.has(u.uid)} /></td>
-              <td className="pr-3 text-right">
-                {m.rol !== 'propietario' && (
-                  <Can roles={['propietario']}>
+          {filas.map(({ m, u }) => {
+            const objetivo = { uid: m.uid, rol: m.rol }
+            return (
+              <tr key={m.uid} className={cn('h-[58px] border-b border-line text-small transition-colors', retirando === u.uid && 'bg-recording/5')}>
+                <td className="pl-3">
+                  <span className="flex items-center gap-2.5 text-body font-medium">
+                    <Avatar uid={u.uid} size="sm" />
+                    {u.nombre}
+                    {u.uid === miUid && ' (tú)'}
+                  </span>
+                </td>
+                <td className="text-muted">{u.correo}</td>
+                <td>
+                  {m.rol === 'propietario' ? (
+                    <Badge tone="warning" icon={<ShieldCheck className="size-3.5" />}>Propietario</Badge>
+                  ) : puedeCambiarRol(miRol, miUid, objetivo) ? (
+                    <SelectorRol valor={m.rol} nombre={u.nombre} deshabilitado={ocupado === u.uid} onChange={(r) => cambiarRol(u, r)} />
+                  ) : (
+                    <span className="text-muted">{ETIQUETA_ROL[m.rol]}</span>
+                  )}
+                </td>
+                <td><Estado usuario={u} enLlamada={enLlamada.has(u.uid)} /></td>
+                <td className="pr-3 text-right">
+                  {puedeRetirar(miRol, miUid, objetivo) && (
                     <ConfirmarRetiro
                       usuario={u}
                       abierto={retirando === u.uid}
+                      deshabilitado={ocupado === u.uid}
                       onAbrir={() => setRetirando(u.uid)}
                       onCerrar={() => setRetirando(null)}
                       onConfirmar={() => retirar(u)}
                     />
-                  </Can>
-                )}
-              </td>
-            </tr>
-          ))}
+                  )}
+                  {u.uid === miUid && miRol === 'admin' && (
+                    <button
+                      onClick={salir}
+                      disabled={ocupado === u.uid}
+                      className="h-8 rounded-lg px-2.5 text-small font-medium text-recording hover:bg-recording/10 disabled:opacity-60"
+                    >
+                      Salir
+                    </button>
+                  )}
+                </td>
+              </tr>
+            )
+          })}
           {!loading && filas.length === 0 && (
             <tr>
-              <td colSpan={5} className="py-10 text-center text-muted">Nadie coincide con «{busqueda}».</td>
+              <td colSpan={5} className="py-10 text-center text-muted">
+                {busqueda ? `Nadie coincide con «${busqueda}».` : 'Todavía no hay miembros que mostrar.'}
+              </td>
             </tr>
           )}
         </tbody>
       </table>
     </Seccion>
-  )
-}
-
-function SelectorRol({ valor, nombre, onChange }: { valor: RolVisible; nombre: string; onChange: (r: RolVisible) => void }) {
-  return (
-    <span className="relative inline-flex">
-      <select
-        value={valor}
-        onChange={(e) => onChange(e.target.value as RolVisible)}
-        aria-label={`Rol de ${nombre}`}
-        className="h-[34px] cursor-pointer appearance-none rounded-lg border border-line bg-raised pr-8 pl-3 text-small font-medium text-fg hover:border-muted/50 focus:border-primary focus:outline-none"
-      >
-        {ROLES_VISIBLES.map((r) => <option key={r}>{r}</option>)}
-      </select>
-      <ChevronDown className="pointer-events-none absolute top-1/2 right-2.5 size-4 -translate-y-1/2 text-muted" />
-    </span>
-  )
-}
-
-function Estado({ usuario, enLlamada }: { usuario: Usuario; enLlamada: boolean }) {
-  const [texto, punto] = enLlamada
-    ? ['En llamada', 'bg-voice']
-    : usuario.estado === 'en-linea'
-      ? ['En línea', 'bg-online']
-      : usuario.estado === 'ausente'
-        ? ['Ausente', 'bg-warning']
-        : ['Desconectado', 'bg-muted']
-  return (
-    <span className="flex items-center gap-2 text-muted">
-      <span className={cn('size-2 rounded-full', punto)} /> {texto}
-    </span>
-  )
-}
-
-/** Botón «Retirar» con su ventana de confirmación anclada (Figma 26). */
-function ConfirmarRetiro({ usuario, abierto, onAbrir, onCerrar, onConfirmar }: { usuario: Usuario; abierto: boolean; onAbrir: () => void; onCerrar: () => void; onConfirmar: () => void }) {
-  const cerrar = useCallback(() => onCerrar(), [onCerrar])
-  const ref = useClickOutside<HTMLDivElement>(cerrar, abierto)
-  return (
-    <div ref={ref} className="relative inline-block">
-      <button
-        onClick={abierto ? onCerrar : onAbrir}
-        aria-expanded={abierto}
-        className={cn('h-8 rounded-lg px-2.5 text-small font-medium text-recording hover:bg-recording/10', abierto && 'bg-recording/15')}
-      >
-        Retirar
-      </button>
-      {abierto && (
-        <div role="alertdialog" aria-labelledby={`retirar-${usuario.uid}`} className="animate-dialog-in absolute right-0 bottom-full z-20 mb-2 flex w-[300px] flex-col gap-3 rounded-xl border border-line bg-raised p-4 text-left shadow-high">
-          <div className="flex flex-col gap-1">
-            <p id={`retirar-${usuario.uid}`} className="text-subtitle font-semibold">¿Retirar a {usuario.nombre}?</p>
-            <p className="text-small text-muted">Perderá acceso a los canales, mensajes y grabaciones de este servidor.</p>
-          </div>
-          <div className="flex justify-end gap-2">
-            <Button variant="secundario" size="sm" onClick={onCerrar}>Cancelar</Button>
-            <Button variant="peligro" size="sm" onClick={onConfirmar} autoFocus>Retirar</Button>
-          </div>
-        </div>
-      )}
-    </div>
   )
 }

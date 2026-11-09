@@ -9,6 +9,8 @@
     "lint": "oxlint",
     "test": "vitest run",
     "preview": "vite preview",
+    "emuladores": "firebase emulators:start --only auth,firestore,storage --project demo-talkwith",
+    "sembrar": "node scripts/sembrar.ts",
     "test:reglas": "firebase emulators:exec --only firestore,storage --project demo-talkwith \"vitest run --config vitest.reglas.config.ts\""
   },
   "dependencies": {
