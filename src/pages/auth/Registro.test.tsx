@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const perfil = vi.hoisted(() => ({ completarRegistro: vi.fn() }))
 
-vi.mock('../../services/authService', () => ({ cerrarSesion: vi.fn() }))
+vi.mock('../../services/authService', () => ({ cerrarSesion: vi.fn(), sesionConGoogle: () => true }))
 vi.mock('../../services/perfilService', () => perfil)
 
 import { ApiError } from '../../services/errores'

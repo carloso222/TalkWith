@@ -79,8 +79,8 @@ const funciones = [
 const pasos = [
   {
     numero: '1',
-    titulo: 'Entra con Google',
-    descripcion: 'Sin contraseñas nuevas: tu cuenta de Google es tu acceso.',
+    titulo: 'Entra con Google o con tu correo',
+    descripcion: 'Usa tu cuenta de Google o crea una con correo y contraseña.',
   },
   {
     numero: '2',

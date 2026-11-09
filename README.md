@@ -20,7 +20,7 @@ npm run lint
 
 Las salas de voz necesitan el servidor de Socket.io de la carpeta `server/` (TW 05). Mira cómo correrlo en [server/README.md](server/README.md).
 
-Para entrar a la app, pulsa **Continuar con Google** en `/login`. Es un inicio de sesión simulado.
+Para entrar a la app, ve a `/login` y pulsa **Continuar con Google**, o entra con correo y contraseña (o crea una cuenta con «Crea una»). Para usar correo en el proyecto real, el proveedor **Correo electrónico/contraseña** debe estar activado en Firebase Console > Authentication > Método de acceso.
 
 ## Tecnologías
 

@@ -1,31 +1,98 @@
-import { AlertCircle, AudioLines } from 'lucide-react'
-import { useState } from 'react'
+import { AlertCircle, AudioLines, CheckCircle2, Lock, Mail } from 'lucide-react'
+import { useState, type FormEvent } from 'react'
 import Button from '../../components/ui/Button'
+import { Field } from '../../components/ui/Field'
 import Logo from '../../components/ui/Logo'
 import { useDocumentTitle } from '../../hooks/useDocumentTitle'
-import { iniciarSesionConGoogle, mensajeErrorAuth } from '../../services/authService'
+import { hayErrores, REGLAS_ACCESO, validarAcceso } from '../../lib/validaciones'
+import {
+  crearCuentaConCorreo,
+  iniciarSesionConCorreo,
+  iniciarSesionConGoogle,
+  mensajeErrorAuth,
+  restablecerContrasena,
+} from '../../services/authService'
+
+type Modo = 'entrar' | 'crear'
 
 /**
  * Figma 02 · Inicio de sesión y 03 · Inicio de sesión — cargando.
- * Solo se entra con Google (sin contraseñas propias). Al volver el popup, el listener
- * de sesión actualiza el store y GuestRoute redirige.
+ * Se entra con Google o con correo y contraseña (Firebase Auth las guarda, nosotros no).
+ * Al iniciar sesión, el listener de sesión actualiza el store y GuestRoute redirige;
+ * una cuenta nueva pasa por Registro para completar el perfil.
  */
 export default function Login() {
-  useDocumentTitle('Inicia sesión')
-  const [cargando, setCargando] = useState(false)
-  const [error, setError] = useState('')
+  const [modo, setModo] = useState<Modo>('entrar')
+  useDocumentTitle(modo === 'entrar' ? 'Inicia sesión' : 'Crea tu cuenta')
 
-  const continuar = async () => {
-    setCargando(true)
+  const [correo, setCorreo] = useState('')
+  const [contrasena, setContrasena] = useState('')
+  const [confirmar, setConfirmar] = useState('')
+  const [tocado, setTocado] = useState(false)
+  const [cargando, setCargando] = useState<'google' | 'correo' | 'reset' | null>(null)
+  const [error, setError] = useState('')
+  const [aviso, setAviso] = useState('')
+
+  const errores = validarAcceso({ correo, contrasena, confirmar }, modo)
+  const ver = (e?: string) => (tocado ? e : undefined)
+
+  const cambiarModo = (nuevo: Modo) => {
+    setModo(nuevo)
+    setTocado(false)
     setError('')
+    setAviso('')
+    setConfirmar('')
+  }
+
+  const conGoogle = async () => {
+    setCargando('google')
+    setError('')
+    setAviso('')
     try {
       await iniciarSesionConGoogle()
     } catch (e) {
       setError(mensajeErrorAuth(e) ?? '')
     } finally {
-      setCargando(false)
+      setCargando(null)
     }
   }
+
+  const conCorreo = async (e: FormEvent) => {
+    e.preventDefault()
+    setTocado(true)
+    setAviso('')
+    if (hayErrores(errores)) return
+    setCargando('correo')
+    setError('')
+    try {
+      if (modo === 'entrar') await iniciarSesionConCorreo(correo, contrasena)
+      else await crearCuentaConCorreo(correo, contrasena)
+    } catch (err) {
+      setError(mensajeErrorAuth(err) ?? '')
+    } finally {
+      setCargando(null)
+    }
+  }
+
+  const olvide = async () => {
+    setError('')
+    setAviso('')
+    if (errores.correo) {
+      setError('Escribe tu correo arriba y vuelve a pulsar «¿Olvidaste tu contraseña?».')
+      return
+    }
+    setCargando('reset')
+    try {
+      await restablecerContrasena(correo)
+      setAviso('Si hay una cuenta con ese correo, te enviamos un enlace para restablecer la contraseña.')
+    } catch (err) {
+      setError(mensajeErrorAuth(err) ?? '')
+    } finally {
+      setCargando(null)
+    }
+  }
+
+  const ocupado = cargando !== null
 
   return (
     <div className="relative flex min-h-full flex-col items-center justify-center overflow-hidden px-4 py-16">
@@ -35,9 +102,9 @@ export default function Login() {
           <Logo size={56} />
           <p className="text-display font-bold">TalkWith</p>
         </div>
-        <div className="flex w-full flex-col gap-7 rounded-2xl border border-line bg-panel p-8 shadow-low">
+        <div className="flex w-full flex-col gap-6 rounded-2xl border border-line bg-panel p-8 shadow-low">
           <div className="flex flex-col gap-2">
-            <h1 className="text-title font-bold">Bienvenido a TalkWith</h1>
+            <h1 className="text-title font-bold">{modo === 'entrar' ? 'Bienvenido a TalkWith' : 'Crea tu cuenta'}</h1>
             <p className="text-muted">Conversa, escucha y recupera lo importante.</p>
           </div>
           {error && (
@@ -45,16 +112,87 @@ export default function Login() {
               <AlertCircle className="size-4 shrink-0 text-recording" /> {error}
             </p>
           )}
-          <Button variant="google" block loading={cargando} onClick={continuar}>
-            {cargando ? 'Iniciando sesión' : 'Continuar con Google'}
+          {aviso && (
+            <p role="status" className="flex items-center gap-2 rounded-[10px] border border-voice/40 bg-voice/10 px-3.5 py-2.5 text-small">
+              <CheckCircle2 className="size-4 shrink-0 text-voice" /> {aviso}
+            </p>
+          )}
+
+          <Button variant="google" block loading={cargando === 'google'} disabled={ocupado} onClick={conGoogle}>
+            {cargando === 'google' ? 'Iniciando sesión' : 'Continuar con Google'}
           </Button>
+
+          <div className="flex items-center gap-3 text-caption text-muted" aria-hidden>
+            <span className="h-px flex-1 bg-line" /> o con tu correo <span className="h-px flex-1 bg-line" />
+          </div>
+
+          <form noValidate onSubmit={conCorreo} className="flex flex-col gap-4">
+            <Field
+              label="Correo"
+              type="email"
+              icon={<Mail className="size-4" />}
+              autoComplete="email"
+              value={correo}
+              onChange={(e) => setCorreo(e.target.value)}
+              error={ver(errores.correo)}
+              disabled={ocupado}
+            />
+            <Field
+              label="Contraseña"
+              type="password"
+              icon={<Lock className="size-4" />}
+              autoComplete={modo === 'entrar' ? 'current-password' : 'new-password'}
+              maxLength={REGLAS_ACCESO.contrasenaMax}
+              value={contrasena}
+              onChange={(e) => setContrasena(e.target.value)}
+              error={ver(errores.contrasena)}
+              help={modo === 'crear' ? `Mínimo ${REGLAS_ACCESO.contrasenaMin} caracteres, con letras y números.` : undefined}
+              disabled={ocupado}
+            />
+            {modo === 'crear' && (
+              <Field
+                label="Confirma tu contraseña"
+                type="password"
+                icon={<Lock className="size-4" />}
+                autoComplete="new-password"
+                maxLength={REGLAS_ACCESO.contrasenaMax}
+                value={confirmar}
+                onChange={(e) => setConfirmar(e.target.value)}
+                error={ver(errores.confirmar)}
+                disabled={ocupado}
+              />
+            )}
+            {modo === 'entrar' && (
+              <button
+                type="button"
+                onClick={olvide}
+                disabled={ocupado}
+                className="self-end text-small font-medium text-primary hover:underline disabled:opacity-60"
+              >
+                ¿Olvidaste tu contraseña?
+              </button>
+            )}
+            <Button type="submit" block loading={cargando === 'correo'} disabled={ocupado}>
+              {modo === 'entrar' ? 'Iniciar sesión' : 'Crear cuenta'}
+            </Button>
+          </form>
+
+          <p className="text-center text-small text-muted">
+            {modo === 'entrar' ? '¿No tienes cuenta? ' : '¿Ya tienes cuenta? '}
+            <button
+              type="button"
+              onClick={() => cambiarModo(modo === 'entrar' ? 'crear' : 'entrar')}
+              className="font-medium text-primary hover:underline"
+            >
+              {modo === 'entrar' ? 'Crea una' : 'Inicia sesión'}
+            </button>
+          </p>
 
           <p className="text-center text-caption text-muted">
             Al continuar, aceptas los <a href="#" className="text-fg underline">Términos de uso</a> y el{' '}
             <a href="#" className="text-fg underline">Aviso de privacidad</a> de TalkWith.
           </p>
         </div>
-        <p className="text-small text-muted">Tu cuenta se crea al entrar con Google</p>
       </div>
       <p className="absolute bottom-10 flex items-center gap-2.5 text-small text-muted">
         <AudioLines className="size-[18px] text-voice" /> Subtítulos en vivo y conversaciones que permanecen

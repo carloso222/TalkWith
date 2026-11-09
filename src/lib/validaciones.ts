@@ -97,3 +97,39 @@ export function validarRegistro(datos: DatosRegistro) {
 
   return errores
 }
+
+/* ---------- acceso con correo ---------- */
+
+export const REGLAS_ACCESO = {
+  contrasenaMin: 8,
+  contrasenaMax: 128,
+}
+
+export interface DatosAcceso {
+  correo: string
+  contrasena: string
+  /** Solo al crear cuenta. */
+  confirmar?: string
+}
+
+const CORREO = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+
+/** `crear` pide contraseña segura y confirmación; `entrar` solo que no estén vacías. */
+export function validarAcceso(datos: DatosAcceso, modo: 'entrar' | 'crear') {
+  const errores: { correo?: string; contrasena?: string; confirmar?: string } = {}
+  const correo = datos.correo.trim()
+
+  if (!correo) errores.correo = 'Escribe tu correo.'
+  else if (!CORREO.test(correo)) errores.correo = 'Ese correo no es válido.'
+
+  if (!datos.contrasena) errores.contrasena = 'Escribe tu contraseña.'
+  else if (modo === 'crear') {
+    if (datos.contrasena.length < REGLAS_ACCESO.contrasenaMin) errores.contrasena = `Mínimo ${REGLAS_ACCESO.contrasenaMin} caracteres.`
+    else if (datos.contrasena.length > REGLAS_ACCESO.contrasenaMax) errores.contrasena = `Máximo ${REGLAS_ACCESO.contrasenaMax} caracteres.`
+    else if (!/[a-zA-Z]/.test(datos.contrasena) || !/\d/.test(datos.contrasena)) errores.contrasena = 'Usa letras y números.'
+
+    if (datos.confirmar !== datos.contrasena) errores.confirmar = 'Las contraseñas no coinciden.'
+  }
+
+  return errores
+}
