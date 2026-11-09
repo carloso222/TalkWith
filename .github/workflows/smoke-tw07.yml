@@ -1,0 +1,41 @@
+name: Smoke TW 07 (temporal)
+
+on:
+  push:
+    branches: [smoke-tw07]
+
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - run: npm ci
+      - run: npm i --no-save playwright@1.56.1 && npx playwright install --with-deps chromium
+      - name: Emuladores y app
+        env:
+          VITE_USE_EMULATORS: 'true'
+        run: |
+          npx firebase emulators:start --only auth,firestore,storage --project demo-talkwith > emuladores.log 2>&1 &
+          npx vite --port 5173 --strictPort > vite.log 2>&1 &
+          npx wait-on -t 180000 tcp:127.0.0.1:8080 tcp:127.0.0.1:9099 http://localhost:5173
+      - name: Prueba manual DoD-18
+        run: node e2e/smoke-tw07.mjs
+      - if: always()
+        run: tail -40 emuladores.log; tail -20 vite.log
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: capturas-smoke-tw07
+          path: capturas/
