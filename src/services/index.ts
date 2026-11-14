@@ -24,6 +24,7 @@ export { enlaceInvitacion, inviteService } from './invitaciones'
 export { sessionService } from './sesiones'
 // historial de mensajes en firestore; los nuevos llegan por socket.io (TW 09)
 export { messageService } from './mensajes'
+export { searchService } from './busqueda'
 export { normalizar, terminos }
 
 
@@ -45,22 +46,6 @@ const deMisServidores = <T extends { ruta: string }>(items: T[]): T[] => {
 
 export const activityService = {
   getRecent: () => simular(deMisServidores(db.actividad)),
-}
-
-export const searchService = {
-  /** Búsqueda simulada sobre mensajes y transcripciones, ordenada por relevancia. */
-  search: (q: string) => {
-    const palabras = terminos(q)
-    if (!palabras.length) return simular([] as typeof db.resultadosBusqueda)
-    const puntuados = deMisServidores(db.resultadosBusqueda)
-      .map((r) => {
-        const texto = normalizar(r.fragmento)
-        return { r, puntos: palabras.filter((w) => texto.includes(w)).length }
-      })
-      .filter((x) => x.puntos > 0)
-      .sort((a, b) => b.puntos - a.puntos)
-    return simular(puntuados.map((x) => x.r))
-  },
 }
 
 /* ---------- Resumen de Inicio ---------- */
