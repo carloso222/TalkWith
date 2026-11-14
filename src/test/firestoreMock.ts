@@ -78,14 +78,42 @@ export const mockFirestore = {
     const datos = registro.docs.get(ref.path) ?? null
     return { id: ref.path.split('/').pop(), exists: () => datos !== null, data: () => datos ?? undefined }
   },
-  /** Documentos hijos directos de la colección, en el orden en que se guardaron en `registro.docs`. */
-  getDocs: async (ref: { path: string }) => {
+  /**
+   * Documentos hijos directos de la colección, en el orden en que se guardaron en `registro.docs`.
+   * Con `collectionGroup` busca en todas las colecciones con ese id y aplica `where` (== y
+   * array-contains), `orderBy` y `limit`.
+   */
+  getDocs: async (ref: { path: string; grupo?: boolean; filtros?: unknown[] }) => {
     fallarSiToca()
-    registro.lecturas.push(ref.path)
+    registro.lecturas.push(ref.grupo ? `grupo:${ref.path}` : ref.path)
     const prefijo = `${ref.path}/`
-    const docs = [...registro.docs.entries()]
-      .filter(([p, datos]) => datos !== null && p.startsWith(prefijo) && !p.slice(prefijo.length).includes('/'))
-      .map(([p, datos]) => ({ id: p.split('/').pop()!, exists: () => true, data: () => datos! }))
+    let entradas = [...registro.docs.entries()].filter(([p, datos]) => {
+      if (datos === null) return false
+      if (!ref.grupo) return p.startsWith(prefijo) && !p.slice(prefijo.length).includes('/')
+      const partes = p.split('/')
+      return partes.length >= 2 && partes[partes.length - 2] === ref.path
+    }) as [string, Datos][]
+    if (ref.grupo) {
+      for (const f of (ref.filtros ?? []) as Array<Record<string, unknown>>) {
+        if ('campo' in f) {
+          const campo = String(f.campo)
+          entradas = entradas.filter(([, d]) =>
+            f.op === 'array-contains' ? Array.isArray(d[campo]) && (d[campo] as unknown[]).includes(f.valor) : d[campo] === f.valor,
+          )
+        } else if ('orden' in f) {
+          const campo = String(f.orden)
+          const valor = (d: Datos) => {
+            const v = d[campo] as { toMillis?: () => number } | number | undefined
+            return typeof v === 'object' && v?.toMillis ? v.toMillis() : Number(v ?? 0)
+          }
+          const signo = f.direccion === 'desc' ? -1 : 1
+          entradas = [...entradas].sort(([, a], [, b]) => signo * (valor(a) - valor(b)))
+        } else if ('limite' in f) {
+          entradas = entradas.slice(0, Number(f.limite))
+        }
+      }
+    }
+    const docs = entradas.map(([p, datos]) => ({ id: p.split('/').pop()!, exists: () => true, data: () => datos }))
     return { docs }
   },
   setDoc: async (ref: { path: string }, datos: Datos) => {

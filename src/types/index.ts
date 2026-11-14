@@ -143,6 +143,8 @@ export interface ResultadoBusqueda {
   autorUid: string
   fragmento: string
   cuando: string
+  /** Fecha en milisegundos, para los filtros de fecha (0 si no se conoce). */
+  fechaMs?: number
   ruta: string
 }
 

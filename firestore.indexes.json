@@ -15,7 +15,7 @@
       "fields": [
         { "fieldPath": "servidorId", "order": "ASCENDING" },
         { "fieldPath": "terminos", "arrayConfig": "CONTAINS" },
-        { "fieldPath": "marcaTiempo", "order": "DESCENDING" }
+        { "fieldPath": "creadoEn", "order": "DESCENDING" }
       ]
     },
     {

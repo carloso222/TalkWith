@@ -10,7 +10,6 @@ import { useDocumentTitle } from '../../hooks/useDocumentTitle'
 import { useService } from '../../hooks/useService'
 import { cn } from '../../lib/cn'
 import { rutas } from '../../lib/routes'
-import { resultadosBusqueda } from '../../mocks/data'
 import { searchService, userService } from '../../services'
 import type { ResultadoBusqueda } from '../../types'
 
@@ -19,20 +18,18 @@ type Fecha = 'hoy' | 'semana'
 
 const SUGERENCIAS = ['permisos del micrófono', 'rúbrica', 'portafolio', 'heurísticas']
 
-// Opciones de filtro a partir de los datos de ejemplo.
-const CANALES = [...new Set(resultadosBusqueda.map((r) => r.ubicacion))].map((u) => ({ valor: u, label: u }))
-const PERSONAS = [...new Set(resultadosBusqueda.map((r) => r.autorUid))].map((uid) => ({ valor: uid, label: userService.find(uid)?.nombre ?? uid }))
 const FECHAS: { valor: Fecha; label: string }[] = [
   { valor: 'hoy', label: 'Hoy' },
   { valor: 'semana', label: 'Últimos 7 días' },
 ]
 
+const SEMANA_MS = 7 * 24 * 3_600_000
 const esDeHoy = (r: ResultadoBusqueda) => r.cuando.startsWith('Hoy')
-const esDeLaSemana = (r: ResultadoBusqueda) => esDeHoy(r) || r.cuando.startsWith('Ayer')
+const esDeLaSemana = (r: ResultadoBusqueda) => esDeHoy(r) || (r.fechaMs ?? 0) >= Date.now() - SEMANA_MS
 
 /**
  * Figma 22 · Búsqueda global y 23 · Sin resultados. Responsable: Carlos.
- * Busca en mensajes y transcripciones (datos de ejemplo). La consulta vive en
+ * Busca en mensajes y transcripciones de Firestore (TW 11), solo en los servidores del usuario. La consulta vive en
  * la URL (?q=) para poder compartirla; se actualiza con debounce.
  */
 export default function Busqueda() {
@@ -56,6 +53,12 @@ export default function Busqueda() {
 
   const { data, loading } = useService(() => searchService.search(consulta), [consulta])
   const todos = useMemo(() => data ?? [], [data])
+  // Opciones de filtro a partir de los resultados de esta búsqueda.
+  const opcionesCanal = useMemo(() => [...new Set(todos.map((r) => r.ubicacion))].map((u) => ({ valor: u, label: u })), [todos])
+  const opcionesPersona = useMemo(
+    () => [...new Set(todos.map((r) => r.autorUid))].map((uid) => ({ valor: uid, label: userService.find(uid)?.nombre ?? uid })),
+    [todos],
+  )
 
   const filtrados = useMemo(
     () =>
@@ -134,8 +137,8 @@ export default function Busqueda() {
           <span className="inline-flex h-8 items-center gap-1.5 rounded-full border border-primary/50 bg-primary/10 px-3 text-small">
             <Server className="size-3.5" /> Servidor: Estudio de Diseño
           </span>
-          <Dropdown etiqueta="Canal" icono={<Hash className="size-3.5" />} valor={canal} opciones={CANALES} onChange={setCanal} />
-          <Dropdown etiqueta="Participante" icono={<User className="size-3.5" />} valor={persona} opciones={PERSONAS} onChange={setPersona} />
+          <Dropdown etiqueta="Canal" icono={<Hash className="size-3.5" />} valor={canal} opciones={opcionesCanal} onChange={setCanal} />
+          <Dropdown etiqueta="Participante" icono={<User className="size-3.5" />} valor={persona} opciones={opcionesPersona} onChange={setPersona} />
           <Dropdown etiqueta="Fecha" icono={<Calendar className="size-3.5" />} valor={fecha} opciones={FECHAS} onChange={setFecha} />
         </div>
 
