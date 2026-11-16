@@ -14,11 +14,13 @@ interface Props {
   disponible: boolean
   /** true solo si hay una sesión transmitiendo en este canal. */
   enVivo: boolean
+  /** Por qué no se está transcribiendo tu voz (navegador sin soporte, bloqueo, error). */
+  aviso?: string
   onRevisarPermisos: () => void
 }
 
 /** Panel lateral «Transcripción en vivo» (Figma 12, 13 y 16). */
-export default function TranscriptPanel({ segmentos, seleccionadoId, onSeleccionar, onCerrar, disponible, enVivo, onRevisarPermisos }: Props) {
+export default function TranscriptPanel({ segmentos, seleccionadoId, onSeleccionar, onCerrar, disponible, enVivo, aviso, onRevisarPermisos }: Props) {
   const lista = useRef<HTMLDivElement>(null)
 
   // Mantiene visible lo último que se dijo.
@@ -89,6 +91,12 @@ export default function TranscriptPanel({ segmentos, seleccionadoId, onSeleccion
               })}
             </div>
           </div>
+          {aviso && (
+            <p role="status" className="flex shrink-0 items-start gap-2 border-t border-line bg-warning/10 px-4 py-3 text-caption text-warning">
+              <MicOff className="mt-px size-3.5 shrink-0" />
+              {aviso}
+            </p>
+          )}
           <footer className="flex shrink-0 items-center gap-2 border-t border-line px-4 py-3 text-caption text-muted">
             <Info className="size-3.5 shrink-0" />
             Selecciona una intervención para resaltar a quien habló.

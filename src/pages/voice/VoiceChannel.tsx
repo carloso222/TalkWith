@@ -1,5 +1,5 @@
 import { Volume2 } from 'lucide-react'
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router'
 import AjustesAudio from './AjustesAudio'
 import AudioRemoto from './AudioRemoto'
@@ -13,6 +13,7 @@ import RecordingDialog from './RecordingDialog'
 import TranscriptPanel from './TranscriptPanel'
 import { useAudioLlamada } from '../../hooks/useAudioLlamada'
 import { useMicrofono } from '../../hooks/useMicrofono'
+import { useReconocimientoVoz } from '../../hooks/useReconocimientoVoz'
 import { useRecordingFlow } from '../../hooks/useRecordingFlow'
 import { useSalaVoz } from '../../hooks/useSalaVoz'
 import { useSubtitlesAvailable } from '../../hooks/useSubtitlesAvailable'
@@ -31,7 +32,8 @@ import type { Canal, Segmento } from '../../types'
  *
  * Los participantes llegan del servidor de socket.io (TW 12 y 14), el audio
  * va directo entre navegadores con webrtc (TW 13) y la transcripcion se lee
- * de firestore en vivo (TW 17).
+ * de firestore en vivo (TW 17). Lo que dices se reconoce en el navegador y se
+ * guarda como segmento (TW 15).
  *
  * Estados de demo por URL (?demo=…):
  *   sin-subtitulos → Figma 13     rechazo → Figma 14
@@ -78,6 +80,29 @@ export default function VoiceChannel({ canal }: { canal: Canal }) {
 
   const disponibles = useSubtitlesAvailable(demo === 'sin-subtitulos')
   const grabacion = useRecordingFlow({ yoUid, participantes, demo })
+
+  // cada frase que terminas de decir se guarda como segmento de la sesion
+  const avisoGuardado = useRef(false)
+  const guardarFrase = useCallback(
+    (texto: string) => {
+      if (!sala.sesionId) return
+      sessionService.addSegment(serverId, sala.sesionId, texto).catch((e: unknown) => {
+        // un solo aviso para no llenar la pantalla si fallan varias seguidas
+        if (avisoGuardado.current) return
+        avisoGuardado.current = true
+        notify('error', 'No se pudo guardar la transcripción', e instanceof Error ? e.message : undefined)
+      })
+    },
+    [serverId, sala.sesionId, notify],
+  )
+  const voz = useReconocimientoVoz({
+    activo: disponibles && Boolean(sala.sesionId) && mic.listo && !mic.silenciado,
+    alFinal: guardarFrase,
+  })
+  let avisoVoz: string | undefined
+  if (!voz.soportado) avisoVoz = 'Tu navegador no transcribe tu voz (usa Chrome o Edge). Sí ves lo que dicen los demás.'
+  else if (voz.estado === 'denegado') avisoVoz = 'El navegador bloqueó el reconocimiento de voz.'
+  else if (voz.estado === 'error') avisoVoz = 'Falló el reconocimiento de voz. Silencia y vuelve a activar el micrófono para reintentar.'
 
   // cronometro de la llamada
   useEffect(() => {
@@ -206,6 +231,7 @@ export default function VoiceChannel({ canal }: { canal: Canal }) {
               let subtitulo: string | undefined
               if (subtitulosVisibles) {
                 if (seleccionado) subtitulo = segSeleccionado?.texto
+                else if (uid === yoUid && voz.parcial) subtitulo = voz.parcial
                 else if (ultimo?.hablanteUid === uid) subtitulo = ultimo.texto
               }
               return (
@@ -236,6 +262,7 @@ export default function VoiceChannel({ canal }: { canal: Canal }) {
           onCerrar={() => setPanelAbierto(false)}
           disponible={disponibles}
           enVivo={Boolean(sala.sesionId)}
+          aviso={avisoVoz}
           onRevisarPermisos={revisarPermisos}
         />
       )}
