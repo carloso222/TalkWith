@@ -3,7 +3,7 @@ import { mensajeErrorSocket, obtenerSocket } from '../lib/socket'
 import { horaCorta } from '../lib/time'
 import { messageService } from '../services'
 import { mensajeDeError } from '../services/errores'
-import { desdeSocket, ordenarMensajes, type MensajeSocket } from '../services/mensajes'
+import { desdeSocket, ordenarMensajes, type BorradoSocket, type EdicionSocket, type MensajeSocket } from '../services/mensajes'
 import { useUiStore } from '../store/uiStore'
 import type { Mensaje } from '../types'
 
@@ -12,16 +12,17 @@ export type EstadoCanal = 'conectando' | 'conectado' | 'reconectando' | 'error'
 /** Mensaje en pantalla; `enviando` = todavia no lo confirma el servidor. */
 export type MensajeVista = Mensaje & { enviando?: boolean }
 
-interface Respuesta {
+interface Respuesta<T = MensajeSocket> {
   ok: boolean
   error?: string
-  mensaje?: MensajeSocket
+  mensaje?: T
 }
 
-// textos para los errores al mandar un mensaje
-function errorAlEnviar(codigo?: string): string {
-  if (codigo === 'muy-rapido') return 'Estás enviando mensajes muy rápido. Espera unos segundos.'
+// textos para los errores al mandar, editar o borrar un mensaje
+function errorDeMensaje(codigo?: string): string {
+  if (codigo === 'muy-rapido') return 'Vas muy rápido. Espera unos segundos.'
   if (codigo === 'mensaje-invalido') return 'El mensaje está vacío o es demasiado largo.'
+  if (codigo === 'no-existe') return 'Ese mensaje ya no existe.'
   return mensajeErrorSocket(codigo)
 }
 
@@ -30,6 +31,23 @@ function juntar(a: Mensaje[], b: Mensaje[]): Mensaje[] {
   const porId = new Map<string, Mensaje>()
   for (const m of [...a, ...b]) porId.set(m.mensajeId, m)
   return ordenarMensajes([...porId.values()])
+}
+
+/**
+ * Al reconectar se pudieron perder ediciones y borrados: manda el historial recién leído,
+ * y de lo que ya teníamos solo se queda lo que llegó por socket después de esa lectura.
+ */
+export function reemplazarHistorial(actuales: Mensaje[], historial: Mensaje[]): Mensaje[] {
+  const ultimo = Math.max(0, ...historial.map((m) => m.creadoMs ?? 0))
+  return juntar(
+    actuales.filter((m) => (m.creadoMs ?? 0) > ultimo),
+    historial,
+  )
+}
+
+/** Aplica una edición que llegó por socket (o como respuesta a la mía). */
+export function aplicarEdicion(mensajes: Mensaje[], e: EdicionSocket): Mensaje[] {
+  return mensajes.map((m) => (m.mensajeId === e.mensajeId ? { ...m, contenido: e.contenido, editadoMs: e.editadoMs } : m))
 }
 
 /**
@@ -79,7 +97,7 @@ export function useCanalTexto(servidorId: string, canalId: string, miUid: string
         if (!primeraVez) {
           messageService
             .getByChannel(servidorId, canalId)
-            .then((lista) => activo && setMensajes((actuales) => juntar(actuales, lista)))
+            .then((lista) => activo && setMensajes((actuales) => reemplazarHistorial(actuales, lista)))
             .catch(() => {})
         }
         primeraVez = false
@@ -97,14 +115,26 @@ export function useCanalTexto(servidorId: string, canalId: string, miUid: string
       }
     }
 
+    const esDeEsteCanal = (m: { servidorId: string; canalId: string }) => m.servidorId === servidorId && m.canalId === canalId
+
     const alLlegar = (m: MensajeSocket) => {
-      if (m.servidorId === servidorId && m.canalId === canalId) setMensajes((actuales) => juntar(actuales, [desdeSocket(m)]))
+      if (esDeEsteCanal(m)) setMensajes((actuales) => juntar(actuales, [desdeSocket(m)]))
+    }
+
+    const alEditarse = (e: EdicionSocket) => {
+      if (esDeEsteCanal(e)) setMensajes((actuales) => aplicarEdicion(actuales, e))
+    }
+
+    const alBorrarse = (b: BorradoSocket) => {
+      if (esDeEsteCanal(b)) setMensajes((actuales) => actuales.filter((m) => m.mensajeId !== b.mensajeId))
     }
 
     socket.on('connect', entrar)
     socket.on('disconnect', alDesconectar)
     socket.on('connect_error', alFallar)
     socket.on('mensaje:nuevo', alLlegar)
+    socket.on('mensaje:editado', alEditarse)
+    socket.on('mensaje:borrado', alBorrarse)
     if (socket.connected) entrar()
 
     return () => {
@@ -113,6 +143,8 @@ export function useCanalTexto(servidorId: string, canalId: string, miUid: string
       socket.off('disconnect', alDesconectar)
       socket.off('connect_error', alFallar)
       socket.off('mensaje:nuevo', alLlegar)
+      socket.off('mensaje:editado', alEditarse)
+      socket.off('mensaje:borrado', alBorrarse)
       if (socket.connected) socket.emit('canal:salir')
     }
   }, [servidorId, canalId, intento])
@@ -128,9 +160,33 @@ export function useCanalTexto(servidorId: string, canalId: string, miUid: string
     obtenerSocket().emit('mensaje:enviar', { servidorId, canalId, contenido: limpio }, (r: Respuesta) => {
       setPendientes((p) => p.filter((m) => m.mensajeId !== id))
       if (r?.ok && r.mensaje) setMensajes((actuales) => juntar(actuales, [desdeSocket(r.mensaje!)]))
-      else notify('error', 'No se envió tu mensaje', errorAlEnviar(r?.error))
+      else notify('error', 'No se envió tu mensaje', errorDeMensaje(r?.error))
     })
   }
+
+  /** Edita uno de mis mensajes. Resuelve true si el servidor lo guardó. */
+  const editar = (mensajeId: string, contenido: string): Promise<boolean> => {
+    const limpio = contenido.trim()
+    if (!limpio) return Promise.resolve(false)
+    return new Promise((resolve) => {
+      obtenerSocket().emit('mensaje:editar', { servidorId, canalId, mensajeId, contenido: limpio }, (r: Respuesta<EdicionSocket>) => {
+        if (r?.ok && r.mensaje) setMensajes((actuales) => aplicarEdicion(actuales, r.mensaje!))
+        else notify('error', 'No se guardó la edición', errorDeMensaje(r?.error))
+        resolve(Boolean(r?.ok))
+      })
+    })
+  }
+
+  /** Borra un mensaje (mío, o de otra persona si soy propietario o admin). */
+  const borrar = (mensajeId: string): Promise<boolean> =>
+    new Promise((resolve) => {
+      obtenerSocket().emit('mensaje:borrar', { servidorId, canalId, mensajeId }, (r: Respuesta) => {
+        // si ya no existia, igual se quita de la pantalla
+        if (r?.ok || r?.error === 'no-existe') setMensajes((actuales) => actuales.filter((m) => m.mensajeId !== mensajeId))
+        if (!r?.ok) notify('error', 'No se eliminó el mensaje', errorDeMensaje(r?.error))
+        resolve(Boolean(r?.ok))
+      })
+    })
 
   const reintentar = () => {
     setEstado('conectando')
@@ -139,5 +195,5 @@ export function useCanalTexto(servidorId: string, canalId: string, miUid: string
   }
 
   const todos: MensajeVista[] = [...mensajes, ...pendientes]
-  return { mensajes: todos, cargando, errorCarga, estado, error, enviar, reintentar }
+  return { mensajes: todos, cargando, errorCarga, estado, error, enviar, editar, borrar, reintentar }
 }

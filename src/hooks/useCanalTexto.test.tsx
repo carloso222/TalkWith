@@ -101,3 +101,85 @@ describe('useCanalTexto (TW 09)', () => {
     expect(socketFalso.ultimo('canal:salir')).toBeDefined()
   })
 })
+
+describe('useCanalTexto: editar y borrar', () => {
+  beforeEach(() => {
+    socketFalso.reiniciar()
+    notify.mockReset()
+    historial.mockReset()
+    historial.mockResolvedValue([guardado('m1', 100), guardado('m2', 200)])
+  })
+
+  const cargado = async () => {
+    const hook = montar()
+    await waitFor(() => expect(hook.result.current.cargando).toBe(false))
+    return hook
+  }
+
+  it('las ediciones de otras personas llegan en vivo y marcan el mensaje como editado', async () => {
+    const { result } = await cargado()
+    act(() => {
+      socketFalso.disparar('mensaje:editado', { mensajeId: 'm1', servidorId: 'A', canalId: 'general', contenido: 'corregido', editadoMs: 150 })
+      socketFalso.disparar('mensaje:editado', { mensajeId: 'm2', servidorId: 'A', canalId: 'otro', contenido: 'no es de aqui', editadoMs: 150 })
+    })
+    expect(result.current.mensajes[0]).toMatchObject({ mensajeId: 'm1', contenido: 'corregido', editadoMs: 150, creadoMs: 100 })
+    expect(result.current.mensajes[1]).toMatchObject({ contenido: 'm2' })
+    expect(result.current.mensajes[1].editadoMs).toBeUndefined()
+  })
+
+  it('los borrados llegan en vivo', async () => {
+    const { result } = await cargado()
+    act(() => socketFalso.disparar('mensaje:borrado', { mensajeId: 'm1', servidorId: 'A', canalId: 'general' }))
+    expect(result.current.mensajes.map((m) => m.mensajeId)).toEqual(['m2'])
+  })
+
+  it('editar manda el cambio y lo aplica cuando el servidor confirma', async () => {
+    const { result } = await cargado()
+    let ok: Promise<boolean>
+    act(() => {
+      ok = result.current.editar('m1', '  nuevo texto  ')
+    })
+    const envio = socketFalso.ultimo('mensaje:editar')!
+    expect(envio.datos).toEqual({ servidorId: 'A', canalId: 'general', mensajeId: 'm1', contenido: 'nuevo texto' })
+    act(() => envio.responder!({ ok: true, mensaje: { mensajeId: 'm1', servidorId: 'A', canalId: 'general', contenido: 'nuevo texto', editadoMs: 500 } }))
+    await expect(ok!).resolves.toBe(true)
+    expect(result.current.mensajes[0]).toMatchObject({ contenido: 'nuevo texto', editadoMs: 500 })
+  })
+
+  it('si el servidor rechaza la edición avisa y no cambia nada', async () => {
+    const { result } = await cargado()
+    let ok: Promise<boolean>
+    act(() => {
+      ok = result.current.editar('m1', 'nuevo')
+    })
+    act(() => socketFalso.ultimo('mensaje:editar')!.responder!({ ok: false, error: 'sin-permiso' }))
+    await expect(ok!).resolves.toBe(false)
+    expect(notify).toHaveBeenCalledWith('error', 'No se guardó la edición', expect.any(String))
+    expect(result.current.mensajes[0].contenido).toBe('m1')
+  })
+
+  it('borrar quita el mensaje cuando el servidor confirma (o si ya no existía)', async () => {
+    const { result } = await cargado()
+    act(() => void result.current.borrar('m1'))
+    expect(socketFalso.ultimo('mensaje:borrar')!.datos).toEqual({ servidorId: 'A', canalId: 'general', mensajeId: 'm1' })
+    act(() => socketFalso.ultimo('mensaje:borrar')!.responder!({ ok: true }))
+    expect(result.current.mensajes.map((m) => m.mensajeId)).toEqual(['m2'])
+
+    act(() => void result.current.borrar('m2'))
+    act(() => socketFalso.ultimo('mensaje:borrar')!.responder!({ ok: false, error: 'no-existe' }))
+    expect(result.current.mensajes).toEqual([])
+    expect(notify).toHaveBeenCalledWith('error', 'No se eliminó el mensaje', 'Ese mensaje ya no existe.')
+  })
+
+  it('al reconectar, lo que se borró o editó mientras tanto queda al día', async () => {
+    const { result } = await cargado()
+    act(() => socketFalso.ultimo('canal:entrar')!.responder!({ ok: true }))
+    act(() => socketFalso.disparar('disconnect'))
+    // mientras no habia conexion: m1 se borro y m2 se edito
+    historial.mockResolvedValue([{ ...guardado('m2', 200, 'editado'), editadoMs: 300 }])
+    act(() => socketFalso.disparar('connect'))
+    act(() => socketFalso.ultimo('canal:entrar')!.responder!({ ok: true }))
+    await waitFor(() => expect(result.current.mensajes.map((m) => m.mensajeId)).toEqual(['m2']))
+    expect(result.current.mensajes[0]).toMatchObject({ contenido: 'editado', editadoMs: 300 })
+  })
+})

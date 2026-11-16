@@ -58,6 +58,33 @@ export function iniciarFirebase(env) {
         await ref.set({ servidorId, canalId, autorUid, contenido, creadoEn, terminos: terminos(contenido) })
         return { mensajeId: ref.id, creadoMs: creadoEn.toMillis() }
       },
+
+      // solo el autor, y mientras siga siendo miembro; tambien actualiza los terminos de busqueda
+      editar: async ({ servidorId, canalId, mensajeId, uid, contenido }) => {
+        if (!(await esMiembro(uid, servidorId))) return { error: 'sin-permiso' }
+        const ref = db.doc(`servidores/${servidorId}/canales/${canalId}/mensajes/${mensajeId}`)
+        return db.runTransaction(async (t) => {
+          const snap = await t.get(ref)
+          if (!snap.exists) return { error: 'no-existe' }
+          if (snap.get('autorUid') !== uid) return { error: 'sin-permiso' }
+          const editadoEn = Timestamp.now()
+          t.update(ref, { contenido, terminos: terminos(contenido), editadoEn })
+          return { editadoMs: editadoEn.toMillis() }
+        })
+      },
+
+      // el autor, o un propietario o admin del servidor (igual que las reglas)
+      borrar: async ({ servidorId, canalId, mensajeId, uid }) => {
+        const ref = db.doc(`servidores/${servidorId}/canales/${canalId}/mensajes/${mensajeId}`)
+        const [snap, miembro] = await Promise.all([ref.get(), db.doc(`servidores/${servidorId}/miembros/${uid}`).get()])
+        if (!miembro.exists) return { error: 'sin-permiso' }
+        if (!snap.exists) return { error: 'no-existe' }
+        const esAutor = snap.get('autorUid') === uid
+        const esGestor = ['propietario', 'admin'].includes(miembro.get('rol'))
+        if (!esAutor && !esGestor) return { error: 'sin-permiso' }
+        await ref.delete()
+        return {}
+      },
     },
 
     // el servidor guarda las sesiones de voz, asi quedan bien aunque alguien cierre la pestana

@@ -18,10 +18,25 @@ const puedeEscribirCanal = async (uid, servidorId, canalId) => uid !== 'intruso'
 // mensajes guardados por el servidor falso (la hora avanza de uno en uno para ver el orden)
 let guardados = []
 let reloj = 1000
+// "dueno" es propietario del servidor: puede borrar mensajes ajenos
 const mensajes = {
   guardar: async (m) => {
     guardados.push(m)
     return { mensajeId: `m${guardados.length}`, creadoMs: ++reloj }
+  },
+  editar: async ({ mensajeId, uid, contenido }) => {
+    const m = guardados[Number(mensajeId.slice(1)) - 1]
+    if (!m || m.borrado) return { error: 'no-existe' }
+    if (m.autorUid !== uid) return { error: 'sin-permiso' }
+    m.contenido = contenido
+    return { editadoMs: ++reloj }
+  },
+  borrar: async ({ mensajeId, uid }) => {
+    const m = guardados[Number(mensajeId.slice(1)) - 1]
+    if (!m || m.borrado) return { error: 'no-existe' }
+    if (m.autorUid !== uid && uid !== 'dueno') return { error: 'sin-permiso' }
+    m.borrado = true
+    return {}
   },
 }
 
@@ -348,6 +363,68 @@ describe('mensajes de texto (TW 09)', () => {
     for (let i = 0; i < 12; i++) respuestas.push(await pedir(ana, 'mensaje:enviar', { servidorId: 's1', canalId: 'texto-e', contenido: `m${i}` }))
     assert.equal(respuestas.filter((r) => r.ok).length, 10)
     assert.deepEqual(respuestas.at(-1), { ok: false, error: 'muy-rapido' })
+  })
+})
+
+describe('editar y borrar mensajes', () => {
+  // ana escribe un mensaje en el canal y beto lo tiene abierto
+  async function conMensaje(canalId) {
+    const ana = cliente('ok-ana')
+    const beto = cliente('ok-beto')
+    await Promise.all([conectado(ana), conectado(beto)])
+    await pedir(ana, 'canal:entrar', { servidorId: 's1', canalId })
+    await pedir(beto, 'canal:entrar', { servidorId: 's1', canalId })
+    const r = await pedir(ana, 'mensaje:enviar', { servidorId: 's1', canalId, contenido: 'hola' })
+    return { ana, beto, mensajeId: r.mensaje.mensajeId }
+  }
+
+  test('la autora edita su mensaje y el cambio llega a todos', async () => {
+    const { ana, beto, mensajeId } = await conMensaje('texto-f')
+    const llega = siguiente(beto, 'mensaje:editado')
+    const r = await pedir(ana, 'mensaje:editar', { servidorId: 's1', canalId: 'texto-f', mensajeId, contenido: '  hola a todos  ' })
+    assert.equal(r.ok, true)
+    const esperado = { mensajeId, servidorId: 's1', canalId: 'texto-f', contenido: 'hola a todos', editadoMs: r.mensaje.editadoMs }
+    assert.deepEqual(r.mensaje, esperado)
+    assert.deepEqual(await llega, esperado)
+    assert.equal(guardados[0].contenido, 'hola a todos')
+  })
+
+  test('nadie edita un mensaje ajeno, ni vacío ni demasiado largo', async () => {
+    const { ana, beto, mensajeId } = await conMensaje('texto-g')
+    const editar = (s, datos) => pedir(s, 'mensaje:editar', { servidorId: 's1', canalId: 'texto-g', mensajeId, ...datos })
+    assert.deepEqual(await editar(beto, { contenido: 'te cambio' }), { ok: false, error: 'sin-permiso' })
+    assert.deepEqual(await editar(ana, { contenido: '  ' }), { ok: false, error: 'mensaje-invalido' })
+    assert.deepEqual(await editar(ana, { contenido: 'x'.repeat(4001) }), { ok: false, error: 'mensaje-invalido' })
+    assert.deepEqual(await editar(ana, { mensajeId: 'm99', contenido: 'otro' }), { ok: false, error: 'no-existe' })
+    assert.deepEqual(await editar(ana, { mensajeId: '../x', contenido: 'otro' }), { ok: false, error: 'datos-invalidos' })
+    assert.equal(guardados[0].contenido, 'hola')
+  })
+
+  test('la autora borra su mensaje y desaparece para todos', async () => {
+    const { ana, beto, mensajeId } = await conMensaje('texto-h')
+    const llega = siguiente(beto, 'mensaje:borrado')
+    assert.deepEqual(await pedir(ana, 'mensaje:borrar', { servidorId: 's1', canalId: 'texto-h', mensajeId }), { ok: true })
+    assert.deepEqual(await llega, { mensajeId, servidorId: 's1', canalId: 'texto-h' })
+    assert.equal(guardados[0].borrado, true)
+  })
+
+  test('otro miembro no puede borrar, pero el propietario sí', async () => {
+    const { beto, mensajeId } = await conMensaje('texto-i')
+    const borrar = (s) => pedir(s, 'mensaje:borrar', { servidorId: 's1', canalId: 'texto-i', mensajeId })
+    assert.deepEqual(await borrar(beto), { ok: false, error: 'sin-permiso' })
+    const dueno = cliente('ok-dueno')
+    await conectado(dueno)
+    assert.deepEqual(await borrar(dueno), { ok: true })
+    assert.deepEqual(await borrar(dueno), { ok: false, error: 'no-existe' })
+  })
+
+  test('alguien sin permiso en el canal no edita ni borra', async () => {
+    const { mensajeId } = await conMensaje('texto-j')
+    const intruso = cliente('ok-intruso')
+    await conectado(intruso)
+    const datos = { servidorId: 's1', canalId: 'texto-j', mensajeId }
+    assert.deepEqual(await pedir(intruso, 'mensaje:editar', { ...datos, contenido: 'x' }), { ok: false, error: 'sin-permiso' })
+    assert.deepEqual(await pedir(intruso, 'mensaje:borrar', datos), { ok: false, error: 'sin-permiso' })
   })
 })
 

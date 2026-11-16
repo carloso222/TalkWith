@@ -209,6 +209,15 @@ export function crearServidor({
 
     // ---------- canales de texto (TW 09) ----------
 
+    // evita que alguien llene el canal: enviar, editar y borrar cuentan juntos
+    function muyRapido() {
+      const ahora = Date.now()
+      socket.data.envios = (socket.data.envios ?? []).filter((t) => ahora - t < VENTANA_MENSAJES_MS)
+      if (socket.data.envios.length >= MAX_MENSAJES_SEGUIDOS) return true
+      socket.data.envios.push(ahora)
+      return false
+    }
+
     // revisa una sola vez por socket que pueda escribir en el canal
     async function permisoTexto(servidorId, canalId) {
       const clave = `${servidorId}/${canalId}`
@@ -250,12 +259,7 @@ export function crearServidor({
       const contenido = typeof datos?.contenido === 'string' ? datos.contenido.trim() : ''
       if (!esId(servidorId) || !esId(canalId)) return responder({ ok: false, error: 'datos-invalidos' })
       if (!contenido || contenido.length > MAX_MENSAJE) return responder({ ok: false, error: 'mensaje-invalido' })
-
-      // evita que alguien llene el canal de mensajes
-      const ahora = Date.now()
-      socket.data.envios = (socket.data.envios ?? []).filter((t) => ahora - t < VENTANA_MENSAJES_MS)
-      if (socket.data.envios.length >= MAX_MENSAJES_SEGUIDOS) return responder({ ok: false, error: 'muy-rapido' })
-      socket.data.envios.push(ahora)
+      if (muyRapido()) return responder({ ok: false, error: 'muy-rapido' })
 
       try {
         if (!(await permisoTexto(servidorId, canalId))) return responder({ ok: false, error: 'sin-permiso' })
@@ -265,6 +269,47 @@ export function crearServidor({
         responder({ ok: true, mensaje })
       } catch (error) {
         registrarError('guardar el mensaje')(error)
+        responder({ ok: false, error: 'error-servidor' })
+      }
+    })
+
+    // editar: solo quien lo escribio. El cambio llega en vivo a quien tiene abierto el canal
+    socket.on('mensaje:editar', async (datos, responder) => {
+      if (typeof responder !== 'function') return
+      const { servidorId, canalId, mensajeId } = datos ?? {}
+      const contenido = typeof datos?.contenido === 'string' ? datos.contenido.trim() : ''
+      if (!esId(servidorId) || !esId(canalId) || !esId(mensajeId)) return responder({ ok: false, error: 'datos-invalidos' })
+      if (!contenido || contenido.length > MAX_MENSAJE) return responder({ ok: false, error: 'mensaje-invalido' })
+      if (muyRapido()) return responder({ ok: false, error: 'muy-rapido' })
+
+      try {
+        if (!(await permisoTexto(servidorId, canalId))) return responder({ ok: false, error: 'sin-permiso' })
+        const r = await mensajes.editar({ servidorId, canalId, mensajeId, uid, contenido })
+        if (r.error) return responder({ ok: false, error: r.error })
+        const cambio = { mensajeId, servidorId, canalId, contenido, editadoMs: r.editadoMs }
+        io.to(`texto:${servidorId}/${canalId}`).emit('mensaje:editado', cambio)
+        responder({ ok: true, mensaje: cambio })
+      } catch (error) {
+        registrarError('editar el mensaje')(error)
+        responder({ ok: false, error: 'error-servidor' })
+      }
+    })
+
+    // borrar: quien lo escribio, o un propietario o admin del servidor
+    socket.on('mensaje:borrar', async (datos, responder) => {
+      if (typeof responder !== 'function') return
+      const { servidorId, canalId, mensajeId } = datos ?? {}
+      if (!esId(servidorId) || !esId(canalId) || !esId(mensajeId)) return responder({ ok: false, error: 'datos-invalidos' })
+      if (muyRapido()) return responder({ ok: false, error: 'muy-rapido' })
+
+      try {
+        if (!(await permisoTexto(servidorId, canalId))) return responder({ ok: false, error: 'sin-permiso' })
+        const r = await mensajes.borrar({ servidorId, canalId, mensajeId, uid })
+        if (r.error) return responder({ ok: false, error: r.error })
+        io.to(`texto:${servidorId}/${canalId}`).emit('mensaje:borrado', { mensajeId, servidorId, canalId })
+        responder({ ok: true })
+      } catch (error) {
+        registrarError('borrar el mensaje')(error)
         responder({ ok: false, error: 'error-servidor' })
       }
     })

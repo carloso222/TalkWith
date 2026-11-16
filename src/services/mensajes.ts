@@ -17,6 +17,22 @@ export interface MensajeSocket {
   creadoMs: number
 }
 
+/** Edición que reparte el servidor (`mensaje:editado`). */
+export interface EdicionSocket {
+  mensajeId: string
+  servidorId: string
+  canalId: string
+  contenido: string
+  editadoMs: number
+}
+
+/** Mensaje borrado que reparte el servidor (`mensaje:borrado`). */
+export interface BorradoSocket {
+  mensajeId: string
+  servidorId: string
+  canalId: string
+}
+
 const texto = (valor: unknown) => (typeof valor === 'string' ? valor : '')
 
 export function desdeSocket(m: MensajeSocket): Mensaje {
@@ -26,6 +42,7 @@ export function desdeSocket(m: MensajeSocket): Mensaje {
 function aMensaje(snap: DocumentSnapshot, canalId: string): Mensaje {
   const d = snap.data() ?? {}
   const creadoMs = d.creadoEn?.toMillis ? d.creadoEn.toMillis() : 0
+  const editadoMs = d.editadoEn?.toMillis ? d.editadoEn.toMillis() : undefined
   return {
     mensajeId: snap.id,
     canalId,
@@ -33,6 +50,7 @@ function aMensaje(snap: DocumentSnapshot, canalId: string): Mensaje {
     contenido: texto(d.contenido),
     creadoMs,
     creadoEn: creadoMs ? horaCorta(new Date(creadoMs)) : '',
+    ...(editadoMs ? { editadoMs } : {}),
   }
 }
 
