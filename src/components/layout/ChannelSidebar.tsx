@@ -1,4 +1,4 @@
-import { ChevronDown, Hash, Headphones, Lock, MicOff, Plus, Settings } from 'lucide-react'
+import { ChevronDown, Hash, Headphones, History, Lock, MicOff, Plus, Settings } from 'lucide-react'
 import { useState } from 'react'
 import { Link, NavLink } from 'react-router'
 import Can from '../../guards/Can'
@@ -38,6 +38,13 @@ export default function ChannelSidebar({ serverId }: { serverId: string }) {
       </header>
 
       <div className="flex-1 overflow-y-auto px-2 py-4">
+        {/* historial de este servidor (tambien queda activo dentro del detalle de una sesion) */}
+        <NavLink to={rutas.sesiones(serverId)} className={({ isActive }) => cn('flex h-9 items-center gap-2 rounded-lg px-2 text-body text-muted hover:bg-raised hover:text-fg', isActive && 'bg-raised font-medium text-fg')}>
+          <History className="size-[18px] shrink-0" />
+          <span className="truncate">Historial de sesiones</span>
+        </NavLink>
+
+        <div className="h-4" />
         <Categoria titulo="Canales de texto" serverId={serverId} abierta={abiertas.texto} onToggle={() => alternar('texto')} />
         {abiertas.texto && texto.map((c) => {
           const menciones = vistos.includes(c.canalId) ? 0 : channelService.mentions(c.canalId)
