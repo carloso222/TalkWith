@@ -49,13 +49,17 @@ Si no hay cuenta de servicio ni emuladores, el servidor no arranca y lo dice en 
 | `canal:entrar` | cliente | `{ servidorId, canalId }` (canal de texto) → responde `{ ok }` |
 | `canal:salir` | cliente | — |
 | `mensaje:enviar` | cliente | `{ servidorId, canalId, contenido }` → responde `{ ok, mensaje }` |
+| `mensaje:editar` | cliente | `{ servidorId, canalId, mensajeId, contenido }` → responde `{ ok, mensaje }`. Solo el autor |
+| `mensaje:borrar` | cliente | `{ servidorId, canalId, mensajeId }` → responde `{ ok }`. El autor, o un propietario o admin |
 | `rtc:senal` | cliente | `{ para: uid, datos: { tipo: 'oferta' \| 'respuesta' \| 'candidato', ... } }` |
 | `mensaje:nuevo` | servidor | `{ mensajeId, servidorId, canalId, autorUid, contenido, creadoMs }` |
+| `mensaje:editado` | servidor | `{ mensajeId, servidorId, canalId, contenido, editadoMs }` |
+| `mensaje:borrado` | servidor | `{ mensajeId, servidorId, canalId }` |
 | `rtc:senal` | servidor | `{ de: uid, conexion, datos }` |
 | `sala:participantes` | servidor | `{ servidorId, canalId, participantes }` |
 | `servidor:llamadas` | servidor | `{ servidorId, llamadas: { canalId: participantes } }` |
 
-Errores posibles: `sin-token`, `token-invalido` (al conectar), `sin-permiso`, `datos-invalidos`, `mensaje-invalido`, `muy-rapido` y `error-servidor`.
+Errores posibles: `sin-token`, `token-invalido` (al conectar), `sin-permiso`, `datos-invalidos`, `mensaje-invalido`, `no-existe` (editar o borrar un mensaje que ya no está), `muy-rapido` y `error-servidor`. Enviar, editar y borrar comparten el límite de 10 en 10 segundos.
 
 ## Audio (WebRTC)
 
