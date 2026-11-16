@@ -1,7 +1,15 @@
 import { useEffect, useRef } from 'react'
 
+interface Props {
+  stream: MediaStream
+  activar: number
+  onBloqueado: () => void
+  /** true cuando la persona se ensordeció: el audio sigue llegando pero no suena. */
+  silenciar?: boolean
+}
+
 /** Reproduce el audio de otra persona de la llamada. No se ve en pantalla. */
-export default function AudioRemoto({ stream, activar, onBloqueado }: { stream: MediaStream; activar: number; onBloqueado: () => void }) {
+export default function AudioRemoto({ stream, activar, onBloqueado, silenciar = false }: Props) {
   const ref = useRef<HTMLAudioElement>(null)
 
   useEffect(() => {
@@ -13,6 +21,11 @@ export default function AudioRemoto({ stream, activar, onBloqueado }: { stream: 
     // activar cambia cuando la persona pulsa "Activar audio"
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [stream, activar])
+
+  // se pone directo en el elemento: react no siempre actualiza `muted` en <audio>
+  useEffect(() => {
+    if (ref.current) ref.current.muted = silenciar
+  }, [silenciar])
 
   return <audio ref={ref} autoPlay />
 }

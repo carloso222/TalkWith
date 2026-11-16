@@ -1,14 +1,22 @@
-import { Headphones, Mic, MicOff, Settings } from 'lucide-react'
-import { useState } from 'react'
+import { HeadphoneOff, Headphones, Mic, MicOff, Settings } from 'lucide-react'
 import { Link } from 'react-router'
 import { rutas } from '../../lib/routes'
 import { useAuthStore } from '../../store/authStore'
+import { micApagado, useVoiceStore } from '../../store/voiceStore'
 import Avatar from '../ui/Avatar'
 
-/** Usuario actual al pie de la columna de canales. */
+const claseBoton = 'rounded-lg p-1 text-muted hover:bg-raised hover:text-fg'
+
+/**
+ * Usuario actual al pie de la columna de canales. El micrófono y los audífonos
+ * controlan la llamada en curso (y se recuerdan para la siguiente), como en Discord.
+ */
 export default function UserPanel() {
   const usuario = useAuthStore((s) => s.usuario)
-  const [silenciado, setSilenciado] = useState(false)
+  const silenciado = useVoiceStore(micApagado)
+  const ensordecido = useVoiceStore((s) => s.ensordecido)
+  const alternarSilencio = useVoiceStore((s) => s.alternarSilencio)
+  const alternarEnsordecido = useVoiceStore((s) => s.alternarEnsordecido)
   const textoEstado = { 'en-linea': 'En línea', ausente: 'Ausente', desconectado: 'Desconectado' }
   if (!usuario) return null
   return (
@@ -20,11 +28,25 @@ export default function UserPanel() {
           <span className="text-caption text-online">{textoEstado[usuario.estado]}</span>
         </span>
       </Link>
-      <button onClick={() => setSilenciado((v) => !v)} className="rounded-lg p-1 text-muted hover:bg-raised hover:text-fg" aria-label={silenciado ? 'Activar micrófono' : 'Silenciar micrófono'} aria-pressed={silenciado}>
+      <button
+        onClick={alternarSilencio}
+        className={claseBoton}
+        aria-label={silenciado ? 'Activar micrófono' : 'Silenciar micrófono'}
+        title={silenciado ? 'Activar micrófono' : 'Silenciar micrófono'}
+        aria-pressed={silenciado}
+      >
         {silenciado ? <MicOff className="size-[18px] text-recording" /> : <Mic className="size-[18px]" />}
       </button>
-      <button className="rounded-lg p-1 text-muted hover:bg-raised hover:text-fg" aria-label="Audio"><Headphones className="size-[18px]" /></button>
-      <Link to={rutas.perfil} className="rounded-lg p-1 text-muted hover:bg-raised hover:text-fg" aria-label="Ajustes de usuario"><Settings className="size-[18px]" /></Link>
+      <button
+        onClick={alternarEnsordecido}
+        className={claseBoton}
+        aria-label={ensordecido ? 'Activar audio' : 'Ensordecer'}
+        title={ensordecido ? 'Activar audio' : 'Ensordecer (no escuchas a nadie y tu micrófono se apaga)'}
+        aria-pressed={ensordecido}
+      >
+        {ensordecido ? <HeadphoneOff className="size-[18px] text-recording" /> : <Headphones className="size-[18px]" />}
+      </button>
+      <Link to={rutas.perfil} className={claseBoton} aria-label="Ajustes de usuario" title="Ajustes de usuario"><Settings className="size-[18px]" /></Link>
     </div>
   )
 }
