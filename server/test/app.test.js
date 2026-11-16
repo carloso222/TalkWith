@@ -52,6 +52,7 @@ const sesiones = {
   },
   agregar: async (servidorId, sesionId, uid) => llamadas.push(['agregar', sesionId, uid]),
   cerrar: async (servidorId, sesionId) => llamadas.push(['cerrar', sesionId]),
+  consentimiento: async (servidorId, sesionId, uid, estado) => llamadas.push(['consentimiento', sesionId, uid, estado]),
 }
 
 const esperar = (ms) => new Promise((r) => setTimeout(r, ms))
@@ -204,6 +205,127 @@ describe('salas de voz', () => {
     await esperar(160)
     assert.equal(llamadas.some((l) => l[0] === 'cerrar' && l[1] === primera.sesionId), false)
     assert.equal(llamadas.filter((l) => l[0] === 'crear' && l[2] === 'voz-f').length, 1)
+  })
+})
+
+describe('grabacion con consentimiento (TW 20)', () => {
+  // ana, beto y caro en la misma sala
+  async function sala(canalId, uids = ['ana', 'beto', 'caro']) {
+    const socks = uids.map((u) => cliente(`ok-${u}`))
+    await Promise.all(socks.map(conectado))
+    for (const s of socks) await pedir(s, 'sala:unirse', { servidorId: 's1', canalId })
+    return socks
+  }
+  const estadoDe = (s, cumple) => siguiente(s, 'grabacion:estado', cumple)
+
+  test('pedir grabar: quien pide queda aceptado y a todos les llega la solicitud', async () => {
+    const [ana, beto, caro] = await sala('voz-g1')
+    const llegaBeto = estadoDe(beto)
+    const llegaCaro = estadoDe(caro)
+    const r = await pedir(ana, 'grabacion:solicitar')
+    assert.equal(r.ok, true)
+    for (const aviso of [await llegaBeto, await llegaCaro]) {
+      assert.equal(aviso.grabacion.fase, 'solicitada')
+      assert.equal(aviso.grabacion.solicitante, 'ana')
+      assert.deepEqual(aviso.grabacion.estados, { ana: 'aceptado', beto: 'pendiente', caro: 'pendiente' })
+    }
+  })
+
+  test('solo empieza cuando todas las personas aceptan, y todos ven "grabando" con la misma hora', async () => {
+    const [ana, beto, caro] = await sala('voz-g2')
+    const { grabacion } = await pedir(ana, 'grabacion:solicitar')
+    const aunNo = estadoDe(ana, (d) => d.grabacion?.estados.beto === 'aceptado')
+    await pedir(beto, 'grabacion:responder', { id: grabacion.id, acepta: true })
+    assert.equal((await aunNo).grabacion.fase, 'solicitada')
+
+    const avisos = [ana, beto, caro].map((s) => estadoDe(s, (d) => d.grabacion?.fase === 'grabando'))
+    await pedir(caro, 'grabacion:responder', { id: grabacion.id, acepta: true })
+    const recibidos = await Promise.all(avisos)
+    assert.equal(new Set(recibidos.map((d) => d.grabacion.inicio)).size, 1)
+    assert.ok(recibidos[0].grabacion.inicio > 0)
+    await esperar(20)
+    const consentimientos = llamadas.filter((l) => l[0] === 'consentimiento').map((l) => [l[2], l[3]])
+    assert.deepEqual(consentimientos, [['ana', 'aceptado'], ['beto', 'aceptado'], ['caro', 'aceptado']])
+  })
+
+  test('si alguien rechaza, se cancela para todos y se dice quién', async () => {
+    const [ana, beto, caro] = await sala('voz-g3')
+    const { grabacion } = await pedir(ana, 'grabacion:solicitar')
+    const aviso = estadoDe(caro, (d) => d.grabacion === null)
+    await pedir(beto, 'grabacion:responder', { id: grabacion.id, acepta: false })
+    assert.deepEqual(await aviso, { servidorId: 's1', canalId: 'voz-g3', grabacion: null, motivo: 'rechazada', por: 'beto' })
+    // ya no se puede aceptar esa solicitud
+    assert.deepEqual(await pedir(caro, 'grabacion:responder', { id: grabacion.id, acepta: true }), { ok: false, error: 'sin-solicitud' })
+  })
+
+  test('cualquiera en la llamada puede detenerla y termina para todos', async () => {
+    const [ana, beto] = await sala('voz-g4', ['ana', 'beto'])
+    const { grabacion } = await pedir(ana, 'grabacion:solicitar')
+    const grabando = estadoDe(ana, (d) => d.grabacion?.fase === 'grabando')
+    await pedir(beto, 'grabacion:responder', { id: grabacion.id, acepta: true })
+    await grabando
+    const fin = estadoDe(ana, (d) => d.grabacion === null)
+    assert.deepEqual(await pedir(beto, 'grabacion:detener'), { ok: true })
+    assert.deepEqual(await fin, { servidorId: 's1', canalId: 'voz-g4', grabacion: null, motivo: 'detenida', por: 'beto' })
+  })
+
+  test('si sale quien la pidió, termina para todos', async () => {
+    const [ana, beto] = await sala('voz-g5', ['ana', 'beto'])
+    const { grabacion } = await pedir(ana, 'grabacion:solicitar')
+    await pedir(beto, 'grabacion:responder', { id: grabacion.id, acepta: true })
+    const fin = estadoDe(beto, (d) => d.grabacion === null)
+    await pedir(ana, 'sala:salir')
+    assert.equal((await fin).motivo, 'salio')
+  })
+
+  test('si entra alguien nuevo mientras se graba, se detiene (no dio su consentimiento)', async () => {
+    const [ana, beto] = await sala('voz-g6', ['ana', 'beto'])
+    const { grabacion } = await pedir(ana, 'grabacion:solicitar')
+    await pedir(beto, 'grabacion:responder', { id: grabacion.id, acepta: true })
+    const fin = estadoDe(ana, (d) => d.grabacion === null)
+    const caro = cliente('ok-caro')
+    await conectado(caro)
+    const r = await pedir(caro, 'sala:unirse', { servidorId: 's1', canalId: 'voz-g6' })
+    assert.deepEqual(await fin, { servidorId: 's1', canalId: 'voz-g6', grabacion: null, motivo: 'nuevo-participante', por: 'caro' })
+    assert.equal(r.grabacion, null)
+  })
+
+  test('si entra alguien mientras se pide, también tiene que responder', async () => {
+    const [ana] = await sala('voz-g7', ['ana', 'beto'])
+    await pedir(ana, 'grabacion:solicitar')
+    const caro = cliente('ok-caro')
+    await conectado(caro)
+    const r = await pedir(caro, 'sala:unirse', { servidorId: 's1', canalId: 'voz-g7' })
+    assert.deepEqual(r.grabacion.estados, { ana: 'aceptado', beto: 'pendiente', caro: 'pendiente' })
+  })
+
+  test('si sale alguien que no había respondido, ya no se le espera', async () => {
+    const [ana, beto, caro] = await sala('voz-g8')
+    const { grabacion } = await pedir(ana, 'grabacion:solicitar')
+    await pedir(beto, 'grabacion:responder', { id: grabacion.id, acepta: true })
+    const grabando = estadoDe(ana, (d) => d.grabacion?.fase === 'grabando')
+    await pedir(caro, 'sala:salir')
+    assert.deepEqual((await grabando).grabacion.estados, { ana: 'aceptado', beto: 'aceptado' })
+  })
+
+  test('quien pidió puede cancelar; nadie más', async () => {
+    const [ana, beto] = await sala('voz-g9', ['ana', 'beto'])
+    await pedir(ana, 'grabacion:solicitar')
+    assert.deepEqual(await pedir(beto, 'grabacion:cancelar'), { ok: false, error: 'sin-solicitud' })
+    const fin = estadoDe(beto, (d) => d.grabacion === null)
+    assert.deepEqual(await pedir(ana, 'grabacion:cancelar'), { ok: true })
+    assert.equal((await fin).motivo, 'cancelada')
+  })
+
+  test('no se puede pedir dos veces ni fuera de una sala; solo, empieza de inmediato', async () => {
+    const [ana, beto] = await sala('voz-g10', ['ana', 'beto'])
+    await pedir(ana, 'grabacion:solicitar')
+    assert.deepEqual(await pedir(beto, 'grabacion:solicitar'), { ok: false, error: 'grabacion-en-curso' })
+    const fuera = cliente('ok-dani')
+    await conectado(fuera)
+    assert.deepEqual(await pedir(fuera, 'grabacion:solicitar'), { ok: false, error: 'sin-sala' })
+    const [solo] = await sala('voz-g11', ['eva'])
+    assert.equal((await pedir(solo, 'grabacion:solicitar')).grabacion.fase, 'grabando')
   })
 })
 

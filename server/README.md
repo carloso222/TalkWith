@@ -52,14 +52,21 @@ Si no hay cuenta de servicio ni emuladores, el servidor no arranca y lo dice en 
 | `mensaje:editar` | cliente | `{ servidorId, canalId, mensajeId, contenido }` → responde `{ ok, mensaje }`. Solo el autor |
 | `mensaje:borrar` | cliente | `{ servidorId, canalId, mensajeId }` → responde `{ ok }`. El autor, o un propietario o admin |
 | `rtc:senal` | cliente | `{ para: uid, datos: { tipo: 'oferta' \| 'respuesta' \| 'candidato', ... } }` |
+| `grabacion:solicitar` | cliente | — → responde `{ ok, grabacion }`. Quien pide cuenta como aceptado |
+| `grabacion:responder` | cliente | `{ id, acepta }` → responde `{ ok }`. Si alguien rechaza, se cancela para todos |
+| `grabacion:cancelar` | cliente | — → `{ ok }`. Solo quien la pidió, mientras se espera |
+| `grabacion:detener` | cliente | — → `{ ok }`. Cualquiera en la llamada |
 | `mensaje:nuevo` | servidor | `{ mensajeId, servidorId, canalId, autorUid, contenido, creadoMs }` |
 | `mensaje:editado` | servidor | `{ mensajeId, servidorId, canalId, contenido, editadoMs }` |
 | `mensaje:borrado` | servidor | `{ mensajeId, servidorId, canalId }` |
 | `rtc:senal` | servidor | `{ de: uid, conexion, datos }` |
 | `sala:participantes` | servidor | `{ servidorId, canalId, participantes }` |
 | `servidor:llamadas` | servidor | `{ servidorId, llamadas: { canalId: participantes } }` |
+| `grabacion:estado` | servidor | `{ servidorId, canalId, grabacion: { id, fase: 'solicitada' \| 'grabando', solicitante, estados, inicio } \| null, motivo?, por? }` |
 
-Errores posibles: `sin-token`, `token-invalido` (al conectar), `sin-permiso`, `datos-invalidos`, `mensaje-invalido`, `no-existe` (editar o borrar un mensaje que ya no está), `muy-rapido` y `error-servidor`. Enviar, editar y borrar comparten el límite de 10 en 10 segundos.
+**Grabación (TW 20).** Empieza solo cuando todas las personas de la sala aceptan. Termina si alguien rechaza, si la detiene cualquiera, si sale quien la pidió o si entra alguien nuevo (no dio su consentimiento). Al terminar, `motivo` es `rechazada`, `cancelada`, `detenida`, `salio` o `nuevo-participante`. Cada respuesta queda en `sesiones/{id}/consentimientos/{uid}`. `sala:unirse` también regresa `grabacion`.
+
+Errores posibles: `sin-token`, `token-invalido` (al conectar), `sin-permiso`, `datos-invalidos`, `mensaje-invalido`, `no-existe` (editar o borrar un mensaje que ya no está), `sin-sala`, `grabacion-en-curso`, `sin-solicitud`, `sin-grabacion`, `muy-rapido` y `error-servidor`. Enviar, editar y borrar comparten el límite de 10 en 10 segundos.
 
 ## Audio (WebRTC)
 

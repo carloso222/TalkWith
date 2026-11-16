@@ -104,6 +104,14 @@ export function iniciarFirebase(env) {
       },
       agregar: (servidorId, sesionId, uid) =>
         db.doc(`servidores/${servidorId}/sesiones/${sesionId}`).update({ participantes: FieldValue.arrayUnion(uid) }),
+      // constancia de lo que respondio cada persona a la solicitud de grabar
+      consentimiento: (servidorId, sesionId, uid, estado) =>
+        db.doc(`servidores/${servidorId}/sesiones/${sesionId}/consentimientos/${uid}`).set({
+          uid,
+          sesionId,
+          estado,
+          actualizadoEn: FieldValue.serverTimestamp(),
+        }),
       cerrar: (servidorId, sesionId, inicio) =>
         db.doc(`servidores/${servidorId}/sesiones/${sesionId}`).update({
           fin: FieldValue.serverTimestamp(),
