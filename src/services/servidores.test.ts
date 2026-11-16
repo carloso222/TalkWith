@@ -90,6 +90,37 @@ describe('serverService', () => {
     expect(await serverService.getMine()).toEqual([])
   })
 
+  it('remove borra el servidor y crea la lápida en un solo batch (como piden las reglas)', async () => {
+    poblarServidor('A', [['yo', 'propietario']], [], 'Alfa')
+    await serverService.remove('A')
+    expect(registro.escrituras).toEqual([])
+    expect(registro.batches).toEqual([
+      [
+        { op: 'delete', ruta: 'servidores/A' },
+        { op: 'set', ruta: 'servidoresEliminados/A', datos: { eliminadoEn: 'MARCA_SERVIDOR' } },
+      ],
+    ])
+  })
+
+  it('remove: un admin o un miembro reciben 403 y no se escribe nada', async () => {
+    poblarServidor('A', [['otra', 'propietario'], ['yo', 'admin']], [], 'Alfa')
+    await expect(serverService.remove('A')).rejects.toMatchObject({ status: 403 })
+    poblarServidor('B', [['otra', 'propietario'], ['yo', 'miembro']], [], 'Beta')
+    await expect(serverService.remove('B')).rejects.toMatchObject({ status: 403 })
+    expect(registro.batches).toEqual([])
+  })
+
+  it('remove de un servidor que no está en la caché da 404', async () => {
+    await expect(serverService.remove('Z')).rejects.toMatchObject({ status: 404 })
+    expect(registro.batches).toEqual([])
+  })
+
+  it('remove traduce el rechazo de las reglas a ApiError', async () => {
+    poblarServidor('A', [['yo', 'propietario']], [], 'Alfa')
+    registro.falla = { code: 'permission-denied' }
+    await expect(serverService.remove('A')).rejects.toBeInstanceOf(ApiError)
+  })
+
   it('find cae a la vista previa de una invitación si no soy miembro', () => {
     useDatosStore.getState().ponerPrevia('P', {
       servidorId: 'P', nombre: 'Previa', descripcion: '', iniciales: 'PR', color: '#fff', propietarioUid: 'x', privacidad: 'invitacion', totalMiembros: 0,

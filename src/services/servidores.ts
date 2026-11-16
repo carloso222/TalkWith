@@ -8,7 +8,8 @@ import { ApiError } from './errores'
 import { aApiError } from './firestore/errores'
 import { esperarServidor } from './firestore/escuchas'
 import { crearIniciales, crearSlug } from './firestore/identificadores'
-import { servidorDe, servidoresDe, uidDe } from './firestore/vistas'
+import { rolEn, servidorDe, servidoresDe, uidDe } from './firestore/vistas'
+import { puedeEliminarServidor } from '../lib/permisos'
 import { crearCodigo, recordarInvitacion } from './invitaciones'
 
 export { crearIniciales, crearSlug }
@@ -85,5 +86,27 @@ export const serverService = {
       servidorId: sid, nombre, descripcion, iniciales, color, propietarioUid: yo, privacidad: datos.privacidad, totalMiembros: 1,
     }
     return { servidor, invitacion }
+  },
+
+  /**
+   * Elimina el servidor. En el mismo batch crea la lápida `servidoresEliminados/{sid}`,
+   * como piden las reglas, para que el id no se vuelva a usar.
+   *
+   * Canales, miembros, mensajes y sesiones quedan en Firestore pero nadie los puede leer:
+   * las reglas exigen que el servidor exista. Cada cliente lo quita de su caché solo
+   * cuando su escucha ve que el documento ya no existe (escuchas.ts).
+   */
+  remove: async (servidorId: string, uid?: string): Promise<void> => {
+    const yo = uidDe(uid)
+    if (!servidorDe(servidorId)) throw new ApiError(404, 'El servidor no existe o ya fue eliminado.')
+    if (!puedeEliminarServidor(rolEn(servidorId, yo))) throw new ApiError(403, 'Solo la persona propietaria puede eliminar el servidor.')
+    const batch = writeBatch(db)
+    batch.delete(doc(db, 'servidores', servidorId))
+    batch.set(doc(db, 'servidoresEliminados', servidorId), { eliminadoEn: serverTimestamp() })
+    try {
+      await batch.commit()
+    } catch (e) {
+      throw aApiError(e)
+    }
   },
 }
