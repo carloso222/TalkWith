@@ -95,9 +95,15 @@ export default function RecordingDialog({ modo, yoUid, solicitanteUid, participa
 
         <div className="mt-5 flex justify-end gap-2">
           {modo === 'solicitante' ? (
-            <button ref={botonPrincipal} onClick={onCancelar} className="rounded-xl border border-line px-4 py-2 text-small font-medium transition-colors hover:bg-raised">
-              Cancelar solicitud
-            </button>
+            <>
+              <button onClick={onCancelar} className="rounded-xl border border-line px-4 py-2 text-small font-medium transition-colors hover:bg-raised">
+                Cancelar solicitud
+              </button>
+              {/* se puede seguir esperando con el diálogo cerrado; el botón de grabar lo vuelve a abrir */}
+              <button ref={botonPrincipal} onClick={onCerrar} className="rounded-xl bg-primary px-4 py-2 text-small font-medium text-white transition-colors hover:bg-primary-active active:bg-primary-active">
+                Esperar respuestas
+              </button>
+            </>
           ) : yoPendiente ? (
             <>
               <button onClick={onRechazar} className="rounded-xl border border-line px-4 py-2 text-small font-medium transition-colors hover:bg-raised">
