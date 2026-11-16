@@ -72,6 +72,8 @@ export interface Mensaje {
   creadoEn: string
   /** Momento exacto en milisegundos (ordena el historial y separa por día). */
   creadoMs?: number
+  /** Cuándo se editó por última vez (sin valor = nunca se editó). */
+  editadoMs?: number
   adjunto?: Adjunto
   /** UIDs mencionados con @ dentro del contenido. */
   menciones?: string[]

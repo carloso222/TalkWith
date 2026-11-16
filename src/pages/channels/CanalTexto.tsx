@@ -1,9 +1,10 @@
 import { Copy, Download, FileText, Hash, Link2, Paperclip, Pencil, RefreshCw, Reply, Search, SendHorizontal, Smile, Trash2, Users, WifiOff } from 'lucide-react'
-import { Fragment, useRef, useState, type FormEvent, type ReactNode } from 'react'
+import { Fragment, useEffect, useRef, useState, type FormEvent, type KeyboardEvent, type ReactNode } from 'react'
 import { useNavigate } from 'react-router'
 import Avatar from '../../components/ui/Avatar'
 import { useAutoScroll } from '../../hooks/useAutoScroll'
 import { useCanalTexto, type MensajeVista } from '../../hooks/useCanalTexto'
+import { useCurrentRole } from '../../hooks/useCurrentRole'
 import { useDocumentTitle } from '../../hooks/useDocumentTitle'
 import { cn } from '../../lib/cn'
 import { rutas } from '../../lib/routes'
@@ -27,9 +28,14 @@ export default function CanalTexto({ canal }: { canal: Canal }) {
   const chat = useCanalTexto(canal.servidorId, canal.canalId, usuario?.uid ?? '')
   const mensajes = chat.mensajes
   const reconectando = chat.estado === 'reconectando'
+  // propietario y admin pueden borrar mensajes de cualquiera (igual que las reglas)
+  const rol = useCurrentRole(canal.servidorId)
+  const soyGestor = rol === 'propietario' || rol === 'admin'
 
   const [verMiembros, setVerMiembros] = useState(true)
   const [texto, setTexto] = useState('')
+  // mensaje que estoy editando (solo uno a la vez)
+  const [editandoId, setEditandoId] = useState<string | null>(null)
   const entrada = useRef<HTMLInputElement>(null)
   const lista = useAutoScroll<HTMLDivElement>(mensajes.length)
 
@@ -49,6 +55,20 @@ export default function CanalTexto({ canal }: { canal: Canal }) {
     const nombre = userService.find(m.autorUid)?.nombre.split(' ')[0]
     setTexto(`@${nombre} `)
     entrada.current?.focus()
+  }
+
+  const terminarEdicion = () => {
+    setEditandoId(null)
+    entrada.current?.focus()
+  }
+
+  // con el campo vacío, la flecha arriba edita mi último mensaje (como en Discord)
+  const alTeclear = (e: KeyboardEvent<HTMLInputElement>) => {
+    if (e.key !== 'ArrowUp' || texto) return
+    const ultimo = [...mensajes].reverse().find((m) => m.autorUid === usuario?.uid && !m.enviando)
+    if (!ultimo) return
+    e.preventDefault()
+    setEditandoId(ultimo.mensajeId)
   }
 
   return (
@@ -112,7 +132,21 @@ export default function CanalTexto({ canal }: { canal: Canal }) {
                       <span className="h-px flex-1 bg-line" /> {diaMensaje(new Date(m.creadoMs ?? 0))} <span className="h-px flex-1 bg-line" />
                     </div>
                   )}
-                  <FilaMensaje mensaje={m} continua={!nuevoDia && anterior?.autorUid === m.autorUid} miUid={usuario?.uid} onResponder={responder} />
+                  <FilaMensaje
+                    mensaje={m}
+                    continua={!nuevoDia && anterior?.autorUid === m.autorUid}
+                    miUid={usuario?.uid}
+                    soyGestor={soyGestor}
+                    editando={editandoId === m.mensajeId}
+                    onResponder={responder}
+                    onEditar={() => setEditandoId(m.mensajeId)}
+                    onGuardar={async (contenido) => {
+                      if (contenido.trim() === m.contenido) return terminarEdicion()
+                      if (await chat.editar(m.mensajeId, contenido)) terminarEdicion()
+                    }}
+                    onCancelar={terminarEdicion}
+                    onBorrar={() => chat.borrar(m.mensajeId)}
+                  />
                 </Fragment>
               )
             })
@@ -140,6 +174,7 @@ export default function CanalTexto({ canal }: { canal: Canal }) {
               ref={entrada}
               value={texto}
               onChange={(e) => setTexto(e.target.value)}
+              onKeyDown={alTeclear}
               placeholder={reconectando ? 'Puedes escribir; se enviará al reconectar' : `Enviar mensaje a #${canal.nombre}`}
               className="h-full min-w-0 flex-1 bg-transparent text-body placeholder:text-muted focus:outline-none"
               aria-label={`Mensaje para #${canal.nombre}`}
@@ -159,12 +194,30 @@ export default function CanalTexto({ canal }: { canal: Canal }) {
   )
 }
 
-/** Un mensaje del canal. `continua` = mismo autor que el anterior (sin avatar ni nombre). */
-function FilaMensaje({ mensaje: m, continua, miUid, onResponder }: { mensaje: MensajeVista; continua: boolean; miUid?: string; onResponder: (m: Mensaje) => void }) {
+interface PropsFila {
+  mensaje: MensajeVista
+  /** Mismo autor que el anterior (sin avatar ni nombre). */
+  continua: boolean
+  miUid?: string
+  soyGestor: boolean
+  editando: boolean
+  onResponder: (m: Mensaje) => void
+  onEditar: () => void
+  onGuardar: (contenido: string) => Promise<void> | void
+  onCancelar: () => void
+  onBorrar: () => Promise<boolean>
+}
+
+/** Un mensaje del canal. */
+function FilaMensaje({ mensaje: m, continua, miUid, soyGestor, editando, onResponder, onEditar, onGuardar, onCancelar, onBorrar }: PropsFila) {
   const autor = userService.find(m.autorUid)
   const notify = useUiStore((s) => s.notify)
   const confirm = useUiStore((s) => s.confirm)
   const meMencionan = Boolean(miUid && m.menciones?.includes(miUid))
+  const esMio = Boolean(miUid) && m.autorUid === miUid
+  // lo que todavia no confirma el servidor no se puede editar ni borrar
+  const puedeEditar = esMio && !m.enviando
+  const puedeBorrar = (esMio || soyGestor) && !m.enviando
 
   const copiar = async () => {
     try {
@@ -178,12 +231,13 @@ function FilaMensaje({ mensaje: m, continua, miUid, onResponder }: { mensaje: Me
   const eliminar = async () => {
     const ok = await confirm({
       titulo: '¿Eliminar este mensaje?',
-      descripcion: 'Se quitará del canal para todas las personas. Esta acción no se puede deshacer.',
+      descripcion: esMio
+        ? 'Se quitará del canal para todas las personas. Esta acción no se puede deshacer.'
+        : `Vas a eliminar un mensaje de ${autor?.nombre ?? 'otra persona'}. Se quitará del canal para todas las personas.`,
       confirmar: 'Eliminar mensaje',
       peligro: true,
     })
-    // Igual que en Grabaciones: se pregunta, pero no se borra nada.
-    if (ok) notify('exito', 'Mensaje eliminado', 'Es solo una demostración: no se borró ningún registro.')
+    if (ok && (await onBorrar())) notify('exito', 'Mensaje eliminado')
   }
 
   return (
@@ -196,10 +250,19 @@ function FilaMensaje({ mensaje: m, continua, miUid, onResponder }: { mensaje: Me
             <time className="text-caption text-muted">{m.creadoEn}</time>
           </p>
         )}
-        <p className="text-body break-words">
-          <ContenidoConMenciones texto={m.contenido} />
-          {m.enviando && <span className="ml-2 text-caption text-muted">Enviando…</span>}
-        </p>
+        {editando ? (
+          <EditorMensaje inicial={m.contenido} onGuardar={onGuardar} onCancelar={onCancelar} />
+        ) : (
+          <p className="text-body break-words">
+            <ContenidoConMenciones texto={m.contenido} />
+            {m.editadoMs && (
+              <span className="ml-1.5 text-caption text-muted" title={`Editado el ${new Date(m.editadoMs).toLocaleString('es-MX')}`}>
+                (editado)
+              </span>
+            )}
+            {m.enviando && <span className="ml-2 text-caption text-muted">Enviando…</span>}
+          </p>
+        )}
         {m.adjunto?.tipo === 'archivo' && (
           <div className="mt-1.5 mb-1 flex max-w-[380px] items-center gap-3 rounded-xl border border-line bg-panel p-3">
             <span className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary/15 text-primary"><FileText className="size-5" /></span>
@@ -221,14 +284,72 @@ function FilaMensaje({ mensaje: m, continua, miUid, onResponder }: { mensaje: Me
         )}
       </div>
 
-      {/* Acciones al pasar el cursor (Figma 10) */}
-      <div className="absolute -top-4 right-5 hidden items-center gap-0.5 rounded-lg border border-line bg-panel p-1 shadow-low group-focus-within:flex group-hover:flex">
-        <AccionMensaje label="Responder" onClick={() => onResponder(m)}><Reply className="size-4" /></AccionMensaje>
-        <AccionMensaje label="Copiar texto" onClick={copiar}><Copy className="size-4" /></AccionMensaje>
-        <AccionMensaje label="Editar" onClick={() => notify('info', 'Editar mensaje', 'La edición se habilita cuando haya conexión con el servidor.')}><Pencil className="size-4" /></AccionMensaje>
-        <AccionMensaje label="Eliminar" onClick={eliminar} peligro><Trash2 className="size-4" /></AccionMensaje>
-      </div>
+      {/* Acciones al pasar el cursor (Figma 10); mientras se edita no estorban */}
+      {!m.enviando && !editando && (
+        <div className="absolute -top-4 right-5 hidden items-center gap-0.5 rounded-lg border border-line bg-panel p-1 shadow-low group-focus-within:flex group-hover:flex">
+          <AccionMensaje label="Responder" onClick={() => onResponder(m)}><Reply className="size-4" /></AccionMensaje>
+          <AccionMensaje label="Copiar texto" onClick={copiar}><Copy className="size-4" /></AccionMensaje>
+          {puedeEditar && <AccionMensaje label="Editar" onClick={onEditar}><Pencil className="size-4" /></AccionMensaje>}
+          {puedeBorrar && <AccionMensaje label="Eliminar" onClick={eliminar} peligro><Trash2 className="size-4" /></AccionMensaje>}
+        </div>
+      )}
     </article>
+  )
+}
+
+/** Campo para editar un mensaje en su lugar: Enter guarda, Esc cancela. */
+function EditorMensaje({ inicial, onGuardar, onCancelar }: { inicial: string; onGuardar: (contenido: string) => Promise<void> | void; onCancelar: () => void }) {
+  const [valor, setValor] = useState(inicial)
+  const [guardando, setGuardando] = useState(false)
+  const campo = useRef<HTMLInputElement>(null)
+
+  // enfoca con el cursor al final, listo para seguir escribiendo
+  useEffect(() => {
+    const c = campo.current
+    if (!c) return
+    c.focus()
+    c.setSelectionRange(c.value.length, c.value.length)
+  }, [])
+
+  const guardar = async () => {
+    if (!valor.trim() || guardando) return
+    setGuardando(true)
+    try {
+      await onGuardar(valor)
+    } finally {
+      setGuardando(false)
+    }
+  }
+
+  return (
+    <div className="flex flex-col gap-1">
+      <input
+        ref={campo}
+        value={valor}
+        onChange={(e) => setValor(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') {
+            e.preventDefault()
+            void guardar()
+          } else if (e.key === 'Escape') {
+            e.preventDefault()
+            onCancelar()
+          }
+        }}
+        disabled={guardando}
+        maxLength={4000}
+        aria-label="Editar mensaje"
+        className="h-10 rounded-lg border border-primary/60 bg-raised px-3 text-body focus:border-primary focus:outline-none"
+      />
+      <p className="text-caption text-muted">
+        Esc para{' '}
+        <button type="button" onClick={onCancelar} className="text-primary hover:underline">cancelar</button>
+        {' · '}Enter para{' '}
+        <button type="button" onClick={() => void guardar()} disabled={!valor.trim() || guardando} className="text-primary hover:underline disabled:opacity-50">
+          {guardando ? 'guardando…' : 'guardar'}
+        </button>
+      </p>
+    </div>
   )
 }
 
