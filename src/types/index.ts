@@ -101,6 +101,21 @@ export interface ParticipanteLlamada {
   conexion: number
 }
 
+/** Grabación de una sala de voz tal como la lleva el servidor de Socket.io (TW 20). */
+export interface GrabacionSala {
+  /** Identifica la solicitud (para no responder a una que ya terminó). */
+  id: number
+  fase: 'solicitada' | 'grabando'
+  solicitante: string
+  /** Respuesta de cada persona que estaba en la llamada. */
+  estados: Record<string, EstadoConsentimiento>
+  /** Cuándo empezó a grabarse (ms del servidor); null mientras se pide. */
+  inicio: number | null
+}
+
+/** Por qué terminó una grabación o una solicitud. */
+export type MotivoFinGrabacion = 'rechazada' | 'cancelada' | 'detenida' | 'salio' | 'nuevo-participante'
+
 export interface Segmento {
   segmentoId: string
   sesionId: string

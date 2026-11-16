@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { mensajeErrorSocket, obtenerSocket } from '../lib/socket'
-import type { ParticipanteLlamada } from '../types'
+import type { GrabacionSala, MotivoFinGrabacion, ParticipanteLlamada } from '../types'
 
 export type EstadoSala = 'conectando' | 'conectado' | 'reconectando' | 'error'
 
@@ -11,12 +11,28 @@ interface RespuestaUnirse {
   inicio?: number
   conexion?: number
   participantes?: ParticipanteLlamada[]
+  grabacion?: GrabacionSala | null
 }
 
 interface AvisoSala {
   servidorId: string
   canalId: string
   participantes: ParticipanteLlamada[]
+}
+
+interface AvisoGrabacion {
+  servidorId: string
+  canalId: string
+  grabacion: GrabacionSala | null
+  motivo?: MotivoFinGrabacion
+  por?: string
+}
+
+/** Último fin de grabación (n cambia en cada aviso, para reaccionar aunque se repita el motivo). */
+export interface FinGrabacion {
+  motivo: MotivoFinGrabacion
+  por: string
+  n: number
 }
 
 // cuanto seguimos diciendo "hablando" despues de la ultima vez que se escucho voz
@@ -34,6 +50,9 @@ export function useSalaVoz(servidorId: string, canalId: string, yo: { silenciado
   const [inicio, setInicio] = useState<number | null>(null)
   // mi numero de conexion en la sala (lo usa el audio para saber cuando rehacerse)
   const [conexion, setConexion] = useState(0)
+  // grabacion compartida de la sala (TW 20) y el ultimo aviso de que termino
+  const [grabacion, setGrabacion] = useState<GrabacionSala | null>(null)
+  const [finGrabacion, setFinGrabacion] = useState<FinGrabacion | null>(null)
   // cambia este numero para volver a intentar
   const [intento, setIntento] = useState(0)
 
@@ -55,6 +74,7 @@ export function useSalaVoz(servidorId: string, canalId: string, yo: { silenciado
         setSesionId(r.sesionId ?? null)
         setInicio(r.inicio ?? null)
         setConexion(r.conexion ?? 0)
+        setGrabacion(r.grabacion ?? null)
       })
     }
 
@@ -74,10 +94,17 @@ export function useSalaVoz(servidorId: string, canalId: string, yo: { silenciado
       if (aviso.servidorId === servidorId && aviso.canalId === canalId) setParticipantes(aviso.participantes)
     }
 
+    const alCambiarGrabacion = (aviso: AvisoGrabacion) => {
+      if (aviso.servidorId !== servidorId || aviso.canalId !== canalId) return
+      setGrabacion(aviso.grabacion)
+      if (aviso.motivo) setFinGrabacion((f) => ({ motivo: aviso.motivo!, por: aviso.por ?? '', n: (f?.n ?? 0) + 1 }))
+    }
+
     socket.on('connect', unirse)
     socket.on('disconnect', alDesconectar)
     socket.on('connect_error', alFallar)
     socket.on('sala:participantes', alCambiar)
+    socket.on('grabacion:estado', alCambiarGrabacion)
     if (socket.connected) unirse()
 
     return () => {
@@ -86,6 +113,7 @@ export function useSalaVoz(servidorId: string, canalId: string, yo: { silenciado
       socket.off('disconnect', alDesconectar)
       socket.off('connect_error', alFallar)
       socket.off('sala:participantes', alCambiar)
+      socket.off('grabacion:estado', alCambiarGrabacion)
       if (socket.connected) socket.emit('sala:salir')
     }
   }, [servidorId, canalId, intento])
@@ -109,5 +137,5 @@ export function useSalaVoz(servidorId: string, canalId: string, yo: { silenciado
     setIntento(intento + 1)
   }
 
-  return { estado, error, participantes, sesionId, inicio, conexion, reintentar }
+  return { estado, error, participantes, sesionId, inicio, conexion, grabacion, finGrabacion, reintentar }
 }

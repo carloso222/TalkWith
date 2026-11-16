@@ -34,11 +34,10 @@ import type { Canal, Segmento } from '../../types'
  * Los participantes llegan del servidor de socket.io (TW 12 y 14), el audio
  * va directo entre navegadores con webrtc (TW 13) y la transcripcion se lee
  * de firestore en vivo (TW 17). Lo que dices se reconoce en el navegador y se
- * guarda como segmento (TW 15).
+ * guarda como segmento (TW 15). La grabación necesita que todas las personas
+ * acepten y su estado lo reparte el servidor, así todos ven «Grabando» (TW 20).
  *
- * Estados de demo por URL (?demo=…):
- *   sin-subtitulos → Figma 13     rechazo → Figma 14
- *   solicitud      → Figma 15     grabando → Figma 16
+ * Estado de demo por URL: ?demo=sin-subtitulos → Figma 13.
  */
 export default function VoiceChannel({ canal }: { canal: Canal }) {
   const { serverId = '' } = useParams()
@@ -82,7 +81,7 @@ export default function VoiceChannel({ canal }: { canal: Canal }) {
   const [ahora, setAhora] = useState(() => Date.now())
 
   const disponibles = useSubtitlesAvailable(demo === 'sin-subtitulos')
-  const grabacion = useRecordingFlow({ yoUid, participantes, demo })
+  const grabacion = useRecordingFlow({ yoUid, grabacion: sala.grabacion, finGrabacion: sala.finGrabacion })
 
   // cada frase que terminas de decir se guarda como segmento de la sesion
   const avisoGuardado = useRef(false)
@@ -160,7 +159,7 @@ export default function VoiceChannel({ canal }: { canal: Canal }) {
     if (grabacion.fase === 'grabando') {
       const ok = await confirm({
         titulo: '¿Detener la grabación?',
-        descripcion: 'La grabación se guardará y la encontrarás en Grabaciones.',
+        descripcion: 'Se detendrá para todas las personas de la llamada.',
         confirmar: 'Detener',
         peligro: true,
       })
@@ -174,7 +173,11 @@ export default function VoiceChannel({ canal }: { canal: Canal }) {
     if (grabacion.fase === 'grabando') {
       const ok = await confirm({
         titulo: '¿Salir de la llamada?',
-        descripcion: 'La grabación seguirá activa para las demás personas.',
+        // si salgo yo, que la pedí, termina para todos (el servidor la detiene)
+        descripcion:
+          grabacion.solicitanteUid === yoUid
+            ? 'Tú pediste la grabación: al salir se detendrá para todas las personas.'
+            : 'La grabación seguirá activa para las demás personas.',
         confirmar: 'Salir',
         peligro: true,
       })
@@ -277,7 +280,7 @@ export default function VoiceChannel({ canal }: { canal: Canal }) {
           modo={grabacion.solicitanteUid === yoUid ? 'solicitante' : 'participante'}
           yoUid={yoUid}
           solicitanteUid={grabacion.solicitanteUid}
-          participantes={participantes}
+          participantes={grabacion.involucrados}
           estados={grabacion.estados}
           onCancelar={grabacion.cancelar}
           onAceptar={grabacion.aceptar}

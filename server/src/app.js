@@ -48,6 +48,8 @@ export function crearServidor({
   const salas = new Map()
   // cambia cada vez que alguien entra a una sala, asi los demas saben que hay que rehacer el audio
   let contadorConexiones = 0
+  // identifica cada solicitud de grabacion
+  let contadorGrabaciones = 0
 
   // solo dejamos conectarse a quien manda un token de firebase valido
   io.use(async (socket, next) => {
@@ -86,6 +88,42 @@ export function crearServidor({
     io.to(`servidor:${servidorId}`).emit('servidor:llamadas', { servidorId, llamadas: llamadasDe(servidorId) })
   }
 
+  // ---------- grabacion con consentimiento (TW 20) ----------
+  // sala.grabacion = null | { id, fase: 'solicitada' | 'grabando', solicitante, estados: { uid: estado }, inicio }
+
+  function estadoGrabacion(sala) {
+    const g = sala.grabacion
+    return g ? { id: g.id, fase: g.fase, solicitante: g.solicitante, estados: { ...g.estados }, inicio: g.inicio ?? null } : null
+  }
+
+  // todos en la sala ven lo mismo: quien pidio, quien acepto y si ya se graba
+  function avisarGrabacion(sala, extra = {}) {
+    const { servidorId, canalId } = sala
+    io.to(sala.clave).emit('grabacion:estado', { servidorId, canalId, grabacion: estadoGrabacion(sala), ...extra })
+  }
+
+  function terminarGrabacion(sala, motivo, por) {
+    if (!sala.grabacion) return
+    sala.grabacion = null
+    avisarGrabacion(sala, { motivo, por })
+  }
+
+  // la grabacion empieza solo cuando todas las personas de la sala aceptaron
+  function revisarConsentimientos(sala) {
+    const g = sala.grabacion
+    if (g?.fase !== 'solicitada') return
+    if (Object.values(g.estados).every((e) => e === 'aceptado')) {
+      g.fase = 'grabando'
+      g.inicio = Date.now()
+    }
+  }
+
+  // deja constancia en firestore de lo que respondio cada quien
+  function guardarConsentimiento(sala, uid, estado) {
+    if (!sala.sesionId || !sesiones.consentimiento) return
+    sesiones.consentimiento(sala.servidorId, sala.sesionId, uid, estado).catch(registrarError('guardar el consentimiento'))
+  }
+
   async function cerrarSala(sala) {
     if (sala.personas.size > 0 || salas.get(sala.clave) !== sala) return
     salas.delete(sala.clave)
@@ -99,6 +137,16 @@ export function crearServidor({
     clearTimeout(persona.temporizador)
     sala.personas.delete(uid)
     avisar(sala)
+    // si sale quien pidio la grabacion (o ya no queda nadie), termina para todos
+    const g = sala.grabacion
+    if (g && (g.solicitante === uid || sala.personas.size === 0)) {
+      terminarGrabacion(sala, 'salio', uid)
+    } else if (g?.fase === 'solicitada' && uid in g.estados) {
+      // quien se fue ya no tiene que responder
+      delete g.estados[uid]
+      revisarConsentimientos(sala)
+      avisarGrabacion(sala)
+    }
     // no cerramos la sesion luego luego por si alguien vuelve a entrar
     if (sala.personas.size === 0) sala.temporizador = setTimeout(() => cerrarSala(sala), esperaCerrarSesion)
   }
@@ -137,7 +185,7 @@ export function crearServidor({
 
       let sala = salas.get(clave)
       if (!sala) {
-        sala = { clave, servidorId, canalId, personas: new Map(), sesionId: null, inicio: Date.now(), creando: null, temporizador: null }
+        sala = { clave, servidorId, canalId, personas: new Map(), sesionId: null, inicio: Date.now(), creando: null, temporizador: null, grabacion: null }
         salas.set(clave, sala)
       }
       clearTimeout(sala.temporizador)
@@ -169,8 +217,85 @@ export function crearServidor({
       }
       await sala.creando
 
-      responder({ ok: true, sesionId: sala.sesionId, inicio: sala.inicio, conexion: persona.conexion, participantes: participantesDe(sala) })
+      // alguien nuevo no ha dado su consentimiento: si se pedia, le toca responder; si ya se grababa, se detiene
+      if (esNuevo && sala.grabacion) {
+        if (sala.grabacion.fase === 'solicitada') {
+          sala.grabacion.estados[uid] = 'pendiente'
+          avisarGrabacion(sala)
+        } else {
+          terminarGrabacion(sala, 'nuevo-participante', uid)
+        }
+      }
+
+      responder({
+        ok: true,
+        sesionId: sala.sesionId,
+        inicio: sala.inicio,
+        conexion: persona.conexion,
+        participantes: participantesDe(sala),
+        grabacion: estadoGrabacion(sala),
+      })
       avisar(sala)
+    })
+
+    // la sala donde estoy, si sigo dentro
+    const miSala = () => {
+      const sala = salas.get(socket.data.sala)
+      return sala?.personas.has(uid) ? sala : null
+    }
+    const respuesta = (fn) => (typeof fn === 'function' ? fn : () => {})
+
+    // pedir grabar: yo cuento como aceptado y a los demas les llega la solicitud
+    socket.on('grabacion:solicitar', (_datos, fn) => {
+      const responder = respuesta(fn)
+      const sala = miSala()
+      if (!sala) return responder({ ok: false, error: 'sin-sala' })
+      if (sala.grabacion) return responder({ ok: false, error: 'grabacion-en-curso' })
+      const estados = Object.fromEntries([...sala.personas.keys()].map((u) => [u, u === uid ? 'aceptado' : 'pendiente']))
+      sala.grabacion = { id: ++contadorGrabaciones, fase: 'solicitada', solicitante: uid, estados, inicio: null }
+      guardarConsentimiento(sala, uid, 'aceptado')
+      // si estoy solo en la sala, empieza de una vez
+      revisarConsentimientos(sala)
+      avisarGrabacion(sala)
+      responder({ ok: true, grabacion: estadoGrabacion(sala) })
+    })
+
+    // aceptar o rechazar; el id evita responder a una solicitud que ya no existe
+    socket.on('grabacion:responder', (datos, fn) => {
+      const responder = respuesta(fn)
+      const sala = miSala()
+      const g = sala?.grabacion
+      if (!g || g.fase !== 'solicitada' || g.id !== datos?.id || g.estados[uid] !== 'pendiente') {
+        return responder({ ok: false, error: 'sin-solicitud' })
+      }
+      if (datos.acepta !== true) {
+        guardarConsentimiento(sala, uid, 'rechazado')
+        terminarGrabacion(sala, 'rechazada', uid)
+        return responder({ ok: true })
+      }
+      g.estados[uid] = 'aceptado'
+      guardarConsentimiento(sala, uid, 'aceptado')
+      revisarConsentimientos(sala)
+      avisarGrabacion(sala)
+      responder({ ok: true })
+    })
+
+    // quien pidio puede cancelar mientras se espera
+    socket.on('grabacion:cancelar', (_datos, fn) => {
+      const responder = respuesta(fn)
+      const sala = miSala()
+      if (sala?.grabacion?.fase !== 'solicitada' || sala.grabacion.solicitante !== uid) return responder({ ok: false, error: 'sin-solicitud' })
+      terminarGrabacion(sala, 'cancelada', uid)
+      responder({ ok: true })
+    })
+
+    // cualquiera en la llamada puede detenerla (es su forma de retirar el consentimiento)
+    socket.on('grabacion:detener', (_datos, fn) => {
+      const responder = respuesta(fn)
+      const sala = miSala()
+      if (sala?.grabacion?.fase !== 'grabando') return responder({ ok: false, error: 'sin-grabacion' })
+      terminarGrabacion(sala, 'detenida', uid)
+      responder({ ok: true })
     })
 
     // se puede llamar con o sin datos antes de la respuesta

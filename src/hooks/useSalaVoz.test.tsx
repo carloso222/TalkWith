@@ -115,4 +115,26 @@ describe('useSalaVoz (TW 12 y 14)', () => {
     expect(ultimo('sala:estado')!.datos).toEqual({ silenciado: false, hablando: false })
     vi.useRealTimers()
   })
+
+  it('grabación (TW 20): llega al entrar y se actualiza con los avisos de esta sala', () => {
+    const { result } = montar()
+    const pedida = { id: 3, fase: 'solicitada', solicitante: 'ana', estados: { ana: 'aceptado', yo: 'pendiente' }, inicio: null }
+    act(() => ultimo('sala:unirse')!.responder!({ ok: true, sesionId: 'ses1', inicio: 1, participantes: [ana], grabacion: pedida }))
+    expect(result.current.grabacion).toEqual(pedida)
+
+    const grabando = { ...pedida, fase: 'grabando', estados: { ana: 'aceptado', yo: 'aceptado' }, inicio: 5000 }
+    act(() => {
+      falso.disparar('grabacion:estado', { servidorId: 'A', canalId: 'voz', grabacion: grabando })
+      // de otra sala: se ignora
+      falso.disparar('grabacion:estado', { servidorId: 'A', canalId: 'otra', grabacion: null, motivo: 'detenida', por: 'x' })
+    })
+    expect(result.current.grabacion).toEqual(grabando)
+    expect(result.current.finGrabacion).toBeNull()
+
+    act(() => falso.disparar('grabacion:estado', { servidorId: 'A', canalId: 'voz', grabacion: null, motivo: 'detenida', por: 'beto' }))
+    expect(result.current.grabacion).toBeNull()
+    expect(result.current.finGrabacion).toEqual({ motivo: 'detenida', por: 'beto', n: 1 })
+    act(() => falso.disparar('grabacion:estado', { servidorId: 'A', canalId: 'voz', grabacion: null, motivo: 'detenida', por: 'beto' }))
+    expect(result.current.finGrabacion?.n).toBe(2)
+  })
 })
