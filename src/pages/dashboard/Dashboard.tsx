@@ -15,7 +15,13 @@ import Button from "../../components/ui/Button";
 import { useDocumentTitle } from "../../hooks/useDocumentTitle";
 import { useService } from "../../hooks/useService";
 import { rutas } from "../../lib/routes";
-import { activityService, dashboardService, userService } from "../../services";
+import {
+    activityService,
+    channelService,
+    dashboardService,
+    serverService,
+    userService,
+} from "../../services";
 import { useAuthStore } from "../../store/authStore";
 import type { Actividad } from "../../types";
 
@@ -24,6 +30,9 @@ const iconoActividad: Record<Actividad["tipo"], typeof MessageSquare> = {
     transcripcion: AudioLines,
     archivo: FileText,
 };
+
+// cuantas transcripciones recientes se listan en Inicio
+const MAX_TRANSCRIPCIONES = 5;
 
 function saludo(fecha = new Date()) {
     const h = fecha.getHours();
@@ -191,6 +200,56 @@ export default function Dashboard() {
                         titulo="Crear un servidor"
                         texto="Reúne a tu grupo en un espacio propio."
                     />
+                </section>
+            )}
+
+            {/* Últimas transcripciones de todos mis servidores */}
+            {resumen && resumen.recientes.length > 0 && (
+                <section
+                    aria-labelledby="transcripciones-titulo"
+                    className="flex flex-col gap-3"
+                >
+                    <h2
+                        id="transcripciones-titulo"
+                        className="text-subtitle font-semibold"
+                    >
+                        Últimas transcripciones
+                    </h2>
+                    <ul className="flex flex-col divide-y divide-line border-y border-line">
+                        {resumen.recientes
+                            .slice(0, MAX_TRANSCRIPCIONES)
+                            .map((s) => (
+                                <li key={`${s.servidorId}/${s.sesionId}`}>
+                                    <Link
+                                        to={rutas.sesion(
+                                            s.servidorId,
+                                            s.sesionId,
+                                        )}
+                                        className="flex items-center gap-3 py-3 transition-colors hover:bg-panel/60"
+                                    >
+                                        <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-panel text-muted">
+                                            <AudioLines className="size-4" />
+                                        </span>
+                                        <span className="min-w-0 flex-1 truncate text-small">
+                                            {channelService.find(s.canalId)
+                                                ?.nombre ?? "Canal de voz"}
+                                            <span className="text-muted">
+                                                {" · "}
+                                                {serverService.find(
+                                                    s.servidorId,
+                                                )?.nombre ?? ""}
+                                            </span>
+                                        </span>
+                                        <span className="shrink-0 text-caption text-muted">
+                                            {s.inicio} · {s.totalSegmentos}{" "}
+                                            {s.totalSegmentos === 1
+                                                ? "segmento"
+                                                : "segmentos"}
+                                        </span>
+                                    </Link>
+                                </li>
+                            ))}
+                    </ul>
                 </section>
             )}
 

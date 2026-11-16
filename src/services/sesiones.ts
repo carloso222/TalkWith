@@ -9,6 +9,8 @@ import {
   orderBy,
   query,
   serverTimestamp,
+  Timestamp,
+  where,
   writeBatch,
   type DocumentSnapshot,
 } from 'firebase/firestore'
@@ -23,6 +25,8 @@ import { uidDe } from './firestore/vistas'
 
 // el historial muestra las sesiones mas recientes
 const MAX_SESIONES = 100
+// en Inicio basta con las ultimas de cada servidor
+const MAX_RECIENTES = 50
 const MAX_TEXTO_SEGMENTO = 1000
 const GRABACIONES: SesionVoz['grabacion'][] = ['grabada', 'procesando', 'sin-grabacion']
 const ESTADOS: EstadoConsentimiento[] = ['pendiente', 'aceptado', 'rechazado']
@@ -71,6 +75,31 @@ export const sessionService = {
     try {
       const snap = await getDocs(query(rutaSesiones(servidorId), orderBy('inicio', 'desc'), limit(MAX_SESIONES)))
       return snap.docs.map(aSesion)
+    } catch (e) {
+      throw aApiError(e)
+    }
+  },
+
+  /**
+   * Sesiones con transcripción desde `desde` en todos los servidores dados, de la más
+   * reciente a la más vieja. La usa Inicio para contar las nuevas y listarlas.
+   */
+  getRecientes: async (servidorIds: string[], desde: Date): Promise<SesionVoz[]> => {
+    if (servidorIds.length === 0) return []
+    const minimo = desde.getTime()
+    try {
+      const porServidor = await Promise.all(
+        servidorIds.map((sid) =>
+          getDocs(query(rutaSesiones(sid), where('inicio', '>=', Timestamp.fromDate(desde)), orderBy('inicio', 'desc'), limit(MAX_RECIENTES))),
+        ),
+      )
+      return porServidor
+        .flatMap((snap) => snap.docs)
+        .map((d) => ({ sesion: aSesion(d), ms: datosDe(d).inicio?.toMillis?.() ?? 0 }))
+        // la consulta ya filtra por fecha; se repite aqui por las sesiones con hora estimada
+        .filter(({ sesion, ms }) => ms >= minimo && sesion.totalSegmentos > 0)
+        .sort((a, b) => b.ms - a.ms)
+        .map(({ sesion }) => sesion)
     } catch (e) {
       throw aApiError(e)
     }

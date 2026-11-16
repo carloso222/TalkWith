@@ -13,7 +13,7 @@ describe('servicios de inicio (mocks filtrados por la caché)', () => {
 
   it('con la caché vacía devuelven estados vacíos, sin rutas a servidores ajenos', async () => {
     expect(await activityService.getRecent()).toEqual([])
-    expect(await dashboardService.getResumen()).toEqual({ llamada: null, sesionesNuevas: 0, servidorId: '' })
+    expect(await dashboardService.getResumen()).toEqual({ llamada: null, sesionesNuevas: 0, recientes: [], servidorId: '' })
   })
 
   it('con estudio-diseno en la caché devuelven sus mocks', async () => {

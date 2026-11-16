@@ -2,6 +2,7 @@ import { Outlet, useLocation, useParams } from 'react-router'
 import { channelService, serverService } from '../../services'
 import ChannelSidebar from './ChannelSidebar'
 import DemoPanel from './DemoPanel'
+import HomeSidebar from './HomeSidebar'
 import ServerBar from './ServerBar'
 import TopBar from './TopBar'
 
@@ -26,20 +27,20 @@ const titulos: [RegExp, string][] = [
 export default function AppLayout() {
   const { serverId, channelId } = useParams()
   const { pathname } = useLocation()
-  const servidorActivo = serverId ?? serverService.defaultId()
   const canal = channelId ? channelService.find(channelId) : undefined
   const enCanal = Boolean(canal)
 
-  const seccion = enCanal ? serverService.find(servidorActivo)?.nombre ?? '' : serverId ? serverService.find(serverId)?.nombre ?? '' : 'Inicio'
+  // fuera de un servidor (Inicio, Tus servidores, Búsqueda, Perfil) ya no se usa el primero por defecto
+  const seccion = serverId ? serverService.find(serverId)?.nombre ?? '' : 'Inicio'
   const detalle = enCanal ? canal!.nombre : titulos.find(([re]) => re.test(pathname))?.[1]
 
   return (
     <div className="flex h-full overflow-hidden">
       <ServerBar />
-      <ChannelSidebar serverId={servidorActivo} />
+      {serverId ? <ChannelSidebar serverId={serverId} /> : <HomeSidebar />}
       <main className="flex min-w-0 flex-1 flex-col bg-base">
         {/* Los canales dibujan su propio encabezado; el resto usa la barra superior común. */}
-        {!enCanal && <TopBar seccion={seccion} detalle={detalle === 'Inicio' ? serverService.find(servidorActivo)?.nombre : detalle} />}
+        {!enCanal && <TopBar seccion={seccion} detalle={detalle === seccion ? undefined : detalle} />}
         <div className="min-h-0 flex-1 overflow-y-auto">
           <Outlet />
         </div>

@@ -19,10 +19,19 @@ type EstadoGrabacion = SesionVoz['grabacion']
 const POR_PAGINA = 6
 const MAX_AVATARES = 4
 
-/** Figma 17 · Historial de sesiones (listado). Responsable: Isaian. */
+/**
+ * Al cambiar de servidor, react router reusa la pagina y los filtros (canal, pagina)
+ * se quedaban con valores del servidor anterior: la lista salia vacia. Con la key
+ * por servidor la pagina arranca limpia.
+ */
 export default function Sesiones() {
-  useDocumentTitle('Historial de sesiones')
   const { serverId = '' } = useParams()
+  return <HistorialServidor key={serverId} serverId={serverId} />
+}
+
+/** Figma 17 · Historial de sesiones (listado). Responsable: Isaian. */
+function HistorialServidor({ serverId }: { serverId: string }) {
+  useDocumentTitle('Historial de sesiones')
   const navigate = useNavigate()
   const notify = useUiStore((s) => s.notify)
   const servidor = serverService.find(serverId)
