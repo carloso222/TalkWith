@@ -133,6 +133,7 @@ export const mockFirestore = {
     return {
       set: (ref: { path: string }, datos: Datos) => void lista.push({ op: 'set', ruta: ref.path, datos }),
       update: (ref: { path: string }, datos: Datos) => void lista.push({ op: 'update', ruta: ref.path, datos }),
+      delete: (ref: { path: string }) => void lista.push({ op: 'delete', ruta: ref.path }),
       commit: async () => {
         fallarSiToca()
         registro.batches.push(lista)

@@ -2,6 +2,7 @@ import { CircleDot, Hash, Info, Mail, Shield, Trash2, Users, X, type LucideIcon 
 import { useCallback } from 'react'
 import { Link, NavLink, useNavigate, useParams } from 'react-router'
 import ServerIcon from '../../components/ui/ServerIcon'
+import Can from '../../guards/Can'
 import { useDocumentTitle } from '../../hooks/useDocumentTitle'
 import { useHotkey } from '../../hooks/useHotkey'
 import { cn } from '../../lib/cn'
@@ -74,11 +75,14 @@ export default function Configuracion({ seccion }: { seccion: SeccionConfig }) {
             </Link>
           </div>
 
-          <div className="mt-auto border-t border-line pt-3">
-            <NavLink to={rutas.ajustes(serverId, 'eliminar')} className={({ isActive }) => cn('flex h-10 items-center gap-3 rounded-lg px-3 text-small text-recording transition-colors hover:bg-recording/10', isActive && 'bg-recording/10 font-medium')}>
-              <Trash2 className="size-[18px]" /> Eliminar servidor
-            </NavLink>
-          </div>
+          {/* solo la persona propietaria puede eliminar el servidor */}
+          <Can roles={['propietario']} serverId={serverId}>
+            <div className="mt-auto border-t border-line pt-3">
+              <NavLink to={rutas.ajustes(serverId, 'eliminar')} className={({ isActive }) => cn('flex h-10 items-center gap-3 rounded-lg px-3 text-small text-recording transition-colors hover:bg-recording/10', isActive && 'bg-recording/10 font-medium')}>
+                <Trash2 className="size-[18px]" /> Eliminar servidor
+              </NavLink>
+            </div>
+          </Can>
         </nav>
 
         <section className="min-w-0 flex-1 overflow-hidden rounded-r-2xl">

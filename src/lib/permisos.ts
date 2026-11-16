@@ -22,6 +22,11 @@ export function puedeRetirar(miRol: Rol | null, miUid: string, objetivo: Objetiv
   return miRol === 'admin' && objetivo.rol === 'miembro'
 }
 
+/** Solo la persona propietaria elimina el servidor (las reglas exigen además la lápida en el mismo batch). */
+export function puedeEliminarServidor(miRol: Rol | null): boolean {
+  return miRol === 'propietario'
+}
+
 /** Cualquier miembro puede salir, salvo la persona propietaria. */
 export function puedeSalir(miRol: Rol | null): boolean {
   return miRol === 'admin' || miRol === 'miembro'
