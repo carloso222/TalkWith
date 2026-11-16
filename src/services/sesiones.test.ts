@@ -38,6 +38,30 @@ describe('sessionService (TW 17)', () => {
     expect(sesiones[1]).toMatchObject({ duracion: 'En curso', grabacion: 'sin-grabacion' })
   })
 
+  it('getRecientes junta las sesiones con transcripción de varios servidores, la más nueva primero', async () => {
+    const hace = (min: number) => {
+      const fecha = new Date(Date.now() - min * 60_000)
+      return { toDate: () => fecha, toMillis: () => fecha.getTime() }
+    }
+    const base = { canalId: 'voz', participantes: ['yo'], grabacion: 'sin-grabacion' }
+    registro.docs.set('servidores/A/sesiones/a1', { ...base, servidorId: 'A', inicio: hace(30), totalSegmentos: 2 })
+    registro.docs.set('servidores/B/sesiones/b1', { ...base, servidorId: 'B', inicio: hace(5), totalSegmentos: 1 })
+    // sin nada transcrito: no cuenta
+    registro.docs.set('servidores/B/sesiones/b2', { ...base, servidorId: 'B', inicio: hace(1), totalSegmentos: 0 })
+    // de hace tres dias: queda fuera
+    registro.docs.set('servidores/A/sesiones/a0', { ...base, servidorId: 'A', inicio: hace(3 * 24 * 60), totalSegmentos: 9 })
+
+    const desde = new Date(Date.now() - 24 * 3_600_000)
+    const recientes = await sessionService.getRecientes(['A', 'B'], desde)
+    expect(registro.lecturas).toEqual(['servidores/A/sesiones', 'servidores/B/sesiones'])
+    expect(recientes.map((s) => s.sesionId)).toEqual(['b1', 'a1'])
+  })
+
+  it('getRecientes sin servidores no consulta nada', async () => {
+    expect(await sessionService.getRecientes([], new Date())).toEqual([])
+    expect(registro.lecturas).toEqual([])
+  })
+
   it('getById regresa null si no existe', async () => {
     expect(await sessionService.getById('A', 'nada')).toBeNull()
     expect(await sessionService.getById('', 's1')).toBeNull()

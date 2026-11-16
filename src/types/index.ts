@@ -165,8 +165,11 @@ export interface ResumenInicio {
     participantes: string[]
     subtitulo?: { hablanteUid: string; texto: string }
   } | null
+  /** Sesiones con transcripción de hoy y de ayer, en todos mis servidores. */
   sesionesNuevas: number
-  /** Servidor por defecto del usuario (el primero al que pertenece). */
+  /** Esas mismas sesiones, de la más reciente a la más vieja. */
+  recientes: SesionVoz[]
+  /** Servidor de la transcripción más reciente (o el primero al que pertenece si no hay). */
   servidorId: string
 }
 /** Datos de la tarjeta de cada servidor en «Tus servidores». */

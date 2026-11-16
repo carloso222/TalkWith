@@ -11,6 +11,7 @@ import * as db from '../mocks/data'
 import { normalizar, terminos } from '../lib/texto'
 import type { Grabacion, ResumenInicio } from '../types'
 import { servidoresDe, uidDe } from './firestore/vistas'
+import { sessionService } from './sesiones'
 import { simular } from './simular'
 
 export { ApiError, manejarError, mensajeDeError } from './errores'
@@ -49,8 +50,17 @@ export const activityService = {
 }
 
 /* ---------- Resumen de Inicio ---------- */
+
+/** Medianoche de ayer: Inicio cuenta como nuevas las transcripciones de hoy y de ayer. */
+function inicioDeAyer(ahora = new Date()): Date {
+  const d = new Date(ahora)
+  d.setDate(d.getDate() - 1)
+  d.setHours(0, 0, 0, 0)
+  return d
+}
+
 export const dashboardService = {
-  getResumen: (uid?: string): Promise<ResumenInicio> => {
+  getResumen: async (uid?: string): Promise<ResumenInicio> => {
     const ids = servidoresDe(uidDe(uid)).map((s) => s.servidorId)
     const canal = db.canales.find(
       (c) => c.tipo === 'voz' && ids.includes(c.servidorId) && (db.enLlamada[c.canalId]?.length ?? 0) > 0,
@@ -67,7 +77,14 @@ export const dashboardService = {
         subtitulo: ultimo ? { hablanteUid: ultimo.hablanteUid, texto: ultimo.texto } : undefined,
       }
     }
-    const sesionesNuevas = db.sesiones.filter((s) => ids.includes(s.servidorId) && /^(Hoy|Ayer)/.test(s.inicio)).length
-    return simular({ llamada, sesionesNuevas, servidorId: llamada?.servidorId ?? ids[0] ?? '' })
+    // transcripciones reales de todos mis servidores (antes salian de los mocks)
+    const recientes = await sessionService.getRecientes(ids, inicioDeAyer()).catch(() => [])
+    return {
+      llamada,
+      sesionesNuevas: recientes.length,
+      recientes,
+      // el acceso rapido lleva al servidor con la transcripcion mas reciente, no siempre al primero
+      servidorId: llamada?.servidorId ?? recientes[0]?.servidorId ?? ids[0] ?? '',
+    }
   },
 }
