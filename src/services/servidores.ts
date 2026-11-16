@@ -1,4 +1,4 @@
-import { collection, doc, serverTimestamp, Timestamp, writeBatch } from 'firebase/firestore'
+import { collection, doc, serverTimestamp, writeBatch } from 'firebase/firestore'
 import { auth, db } from '../lib/firebase'
 import { validarServidor, type DatosServidor } from '../lib/validaciones'
 import * as mocks from '../mocks/data'
@@ -10,12 +10,11 @@ import { esperarServidor } from './firestore/escuchas'
 import { crearIniciales, crearSlug } from './firestore/identificadores'
 import { rolEn, servidorDe, servidoresDe, uidDe } from './firestore/vistas'
 import { puedeEliminarServidor } from '../lib/permisos'
-import { crearCodigo, recordarInvitacion } from './invitaciones'
+import { crearCodigo, documentoInvitacion, recordarInvitacion } from './invitaciones'
 
 export { crearIniciales, crearSlug }
 
 const COLORES_SERVIDOR = ['#6366f1', '#ec4899', '#16a34a', '#d97706', '#0ea5e9', '#8b5cf6', '#ef4444']
-const VIGENCIA_INVITACION_MS = 7 * 24 * 3_600_000
 
 // revisa los datos igual que lo haria el backend
 function revisarServidor(datos: DatosServidor, uid: string): void {
@@ -65,15 +64,8 @@ export const serverService = {
       servidorId: sid, nombre: 'general', tipo: 'texto', descripcion: 'Conversación general del servidor',
     })
     batch.set(doc(db, 'servidores', sid, 'canales', `${sid}-voz`), { servidorId: sid, nombre: 'Sala de voz', tipo: 'voz' })
-    batch.set(doc(db, 'invitaciones', codigo), {
-      servidorId: sid,
-      invitaUid: yo,
-      creadaEn: serverTimestamp(),
-      expiraEn: Timestamp.fromMillis(Date.now() + VIGENCIA_INVITACION_MS),
-      servidorNombre: nombre,
-      servidorIniciales: iniciales,
-      servidorColor: color,
-    })
+    const datosInvitacion = documentoInvitacion(sid, { nombre, iniciales, color }, yo)
+    batch.set(doc(db, 'invitaciones', codigo), datosInvitacion)
     try {
       await batch.commit()
     } catch (e) {
@@ -81,7 +73,7 @@ export const serverService = {
     }
     await esperarServidor(sid)
     const invitacion: Invitacion = { codigo, servidorId: sid, invitaUid: yo, expiraEn: '7 días', enLinea: 1, enLlamada: 0 }
-    recordarInvitacion(invitacion)
+    recordarInvitacion(invitacion, datosInvitacion.expiraEn.toMillis())
     const servidor = servidorDe(sid) ?? {
       servidorId: sid, nombre, descripcion, iniciales, color, propietarioUid: yo, privacidad: datos.privacidad, totalMiembros: 1,
     }
