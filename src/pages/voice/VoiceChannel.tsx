@@ -24,6 +24,7 @@ import { rutas } from '../../lib/routes'
 import { channelService, sessionService } from '../../services'
 import { useAuthStore } from '../../store/authStore'
 import { useUiStore } from '../../store/uiStore'
+import { useVoiceStore } from '../../store/voiceStore'
 import type { Canal, Segmento } from '../../types'
 
 /**
@@ -50,6 +51,8 @@ export default function VoiceChannel({ canal }: { canal: Canal }) {
   const confirm = useUiStore((s) => s.confirm)
 
   const mic = useMicrofono()
+  // con los audifonos apagados (panel de usuario) no suena nadie
+  const ensordecido = useVoiceStore((s) => s.ensordecido)
   const sala = useSalaVoz(serverId, canal.canalId, { silenciado: mic.silenciado, hablando: mic.hablando })
 
   // siempre te ves a ti aunque todavia no haya conexion con el servidor
@@ -214,7 +217,7 @@ export default function VoiceChannel({ canal }: { canal: Canal }) {
           </div>
         )}
         {Object.entries(audio.remotos).map(([uid, stream]) => (
-          <AudioRemoto key={uid} stream={stream} activar={activarAudio} onBloqueado={() => setAudioBloqueado(true)} />
+          <AudioRemoto key={uid} stream={stream} activar={activarAudio} silenciar={ensordecido} onBloqueado={() => setAudioBloqueado(true)} />
         ))}
 
         <div className="min-h-0 flex-1 px-6 pt-6 pb-28">

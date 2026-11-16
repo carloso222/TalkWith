@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { micApagado, useVoiceStore } from '../store/voiceStore'
 
 export type EstadoMicrofono = 'pidiendo' | 'listo' | 'denegado' | 'sin-microfono' | 'no-soportado' | 'error'
 
@@ -9,7 +10,9 @@ const UMBRAL_VOZ = 0.12
 export function useMicrofono() {
   const soportado = Boolean(navigator.mediaDevices?.getUserMedia)
   const [estado, setEstado] = useState<EstadoMicrofono>(soportado ? 'pidiendo' : 'no-soportado')
-  const [silenciado, setSilenciado] = useState(false)
+  // compartido con el panel de usuario: silenciar alla tambien silencia aqui
+  const silenciado = useVoiceStore(micApagado)
+  const alternarSilencio = useVoiceStore((s) => s.alternarSilencio)
   const [nivel, setNivel] = useState(0)
   const [dispositivos, setDispositivos] = useState<MediaDeviceInfo[]>([])
   // microfono que eligio el usuario ('' = el predeterminado)
@@ -95,7 +98,7 @@ export function useMicrofono() {
     dispositivos,
     dispositivoActual: actual,
     pista: listo ? pistaActual : null,
-    alternarSilencio: () => setSilenciado(!silenciado),
+    alternarSilencio,
     cambiarDispositivo: (id: string) => {
       setEstado('pidiendo')
       setElegido(id)
