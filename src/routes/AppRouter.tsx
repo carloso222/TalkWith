@@ -1,4 +1,5 @@
 import { createBrowserRouter, RouterProvider } from 'react-router'
+import EnlaceInvitacion from './EnlaceInvitacion'
 import AppLayout from '../components/layout/AppLayout'
 import GuestRoute from '../guards/GuestRoute'
 import MemberGuard from '../guards/MemberGuard'
@@ -29,7 +30,8 @@ import Configuracion from '../pages/settings/Configuracion'
  *  ProtectedRoute ..... /app                      05 Inicio
  *                       /app/servidores           06 Tus servidores
  *                       /app/servidores/nuevo     07, 09 Crear servidor + toasts
- *                       /app/unirse               08 Unirse con invitación
+ *                       /app/unirse(/:codigo)     08 Unirse con invitación
+ *  Pública ............ /i/:codigo                enlace de invitación → /app/unirse/:codigo
  *                       /app/buscar               22–23 Búsqueda
  *                       /app/perfil               28 Perfil
  *  + MemberGuard ...... /app/s/:id/c/:canal       10–11 Texto · 12–16 Voz
@@ -41,6 +43,7 @@ import Configuracion from '../pages/settings/Configuracion'
  */
 const router = createBrowserRouter([
   { path: '/', element: <Landing /> },
+  { path: '/i/:codigo', element: <EnlaceInvitacion /> },
   {
     element: <GuestRoute />,
     children: [
@@ -59,6 +62,7 @@ const router = createBrowserRouter([
           { path: 'servidores', element: <Servidores /> },
           { path: 'servidores/nuevo', element: <CrearServidor /> },
           { path: 'unirse', element: <Unirse /> },
+          { path: 'unirse/:codigo', element: <Unirse /> },
           { path: 'buscar', element: <Busqueda /> },
           { path: 'perfil', element: <Perfil /> },
           {

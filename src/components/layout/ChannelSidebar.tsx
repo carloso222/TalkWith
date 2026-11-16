@@ -1,4 +1,4 @@
-import { ChevronDown, Hash, Headphones, History, Lock, MicOff, Plus, Settings } from 'lucide-react'
+import { ChevronDown, Hash, Headphones, History, Lock, MicOff, Plus, Settings, UserPlus } from 'lucide-react'
 import { useState } from 'react'
 import { Link, NavLink } from 'react-router'
 import Can from '../../guards/Can'
@@ -7,6 +7,7 @@ import { cn } from '../../lib/cn'
 import { rutas } from '../../lib/routes'
 import { channelService, serverService, userService } from '../../services'
 import Avatar from '../ui/Avatar'
+import InvitarModal from './InvitarModal'
 import UserPanel from './UserPanel'
 
 /** Columna de canales de 260 px (Figma: "Columna de canales"). */
@@ -23,6 +24,7 @@ export default function ChannelSidebar({ serverId }: { serverId: string }) {
   const alternar = (k: 'texto' | 'voz') => setAbiertas((a) => ({ ...a, [k]: !a[k] }))
   // Canales cuyas menciones ya se leyeron: arranca con lo que diga el servicio.
   const [vistos, setVistos] = useState<string[]>(() => channelService.readIds())
+  const [invitando, setInvitando] = useState(false)
   const marcarVisto = (id: string) => setVistos((v) => (v.includes(id) ? v : [...v, id]))
 
   return (
@@ -32,10 +34,13 @@ export default function ChannelSidebar({ serverId }: { serverId: string }) {
         <div className="flex items-center gap-0.5 text-muted">
           <button className="rounded-lg p-1.5 hover:bg-raised hover:text-fg" aria-label="Opciones del servidor"><ChevronDown className="size-[18px]" /></button>
           <Can roles={['propietario', 'admin']} serverId={serverId}>
+            <button onClick={() => setInvitando(true)} className="rounded-lg p-1.5 hover:bg-raised hover:text-fg" aria-label="Invitar personas" title="Invitar personas"><UserPlus className="size-[18px]" /></button>
             <Link to={rutas.ajustes(serverId)} className="rounded-lg p-1.5 hover:bg-raised hover:text-fg" aria-label="Configuración del servidor"><Settings className="size-[18px]" /></Link>
           </Can>
         </div>
       </header>
+      {/* key por servidor: al cambiar de servidor no se ve el enlace del anterior */}
+      <InvitarModal key={serverId} servidorId={serverId} open={invitando} onClose={() => setInvitando(false)} />
 
       <div className="flex-1 overflow-y-auto px-2 py-4">
         {/* historial de este servidor (tambien queda activo dentro del detalle de una sesion) */}

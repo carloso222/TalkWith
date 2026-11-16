@@ -1,24 +1,28 @@
 import { AlertCircle, Check, Headphones, Info, Link2, Users } from 'lucide-react'
 import { useState, type FormEvent } from 'react'
-import { useNavigate } from 'react-router'
+import { useNavigate, useParams } from 'react-router'
 import Button from '../../components/ui/Button'
 import { Field } from '../../components/ui/Field'
 import ServerIcon from '../../components/ui/ServerIcon'
 import { useDebounce } from '../../hooks/useDebounce'
 import { useService } from '../../hooks/useService'
 import { rutas } from '../../lib/routes'
-import { channelService, inviteService, memberService, mensajeDeError, serverService, userService } from '../../services'
+import { channelService, enlaceInvitacion, inviteService, memberService, mensajeDeError, serverService, userService } from '../../services'
 import { useUiStore } from '../../store/uiStore'
 import ModalServidor from './ModalServidor'
 import { useCerrarModal } from './useCerrarModal'
 
-/** Figma 08 · Unirse con invitación. Responsable: Isaian. Prueba con talkwith.app/i/arte-digital-5MZ8 */
+/**
+ * Figma 08 · Unirse con invitación. Responsable: Isaian.
+ * Desde un enlace /i/:codigo llega a /app/unirse/:codigo con el campo ya lleno.
+ */
 export default function Unirse() {
   const navigate = useNavigate()
   const cerrar = useCerrarModal()
   const notify = useUiStore((s) => s.notify)
+  const { codigo = '' } = useParams()
 
-  const [enlace, setEnlace] = useState('')
+  const [enlace, setEnlace] = useState(codigo)
   const consulta = useDebounce(enlace.trim(), 300)
   const { data: invitacion, loading } = useService(() => inviteService.validate(consulta), [consulta])
 
@@ -76,7 +80,7 @@ export default function Unirse() {
       <form onSubmit={unirse} className="flex flex-col gap-3">
         <Field
           label="Enlace o código de invitación"
-          placeholder="talkwith.app/i/club-lectura-7KD2"
+          placeholder={enlaceInvitacion('club-lectura-k3m9x2q7vb4n')}
           icon={<Link2 className="size-[18px]" />}
           value={enlace}
           onChange={(e) => {
@@ -95,7 +99,7 @@ export default function Unirse() {
         )}
         {!enlace && (
           <p className="flex items-center gap-1.5 text-caption text-muted">
-            <AlertCircle className="size-3.5" /> Prueba con talkwith.app/i/arte-digital-5MZ8
+            <AlertCircle className="size-3.5" /> Pide el enlace a una persona propietaria o admin del servidor.
           </p>
         )}
 

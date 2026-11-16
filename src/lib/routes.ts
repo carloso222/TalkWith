@@ -12,6 +12,8 @@ export const rutas = {
   servidores: '/app/servidores',
   crearServidor: '/app/servidores/nuevo',
   unirse: '/app/unirse',
+  /** Unirse con el código ya escrito (a donde llevan los enlaces /i/:codigo). */
+  unirseCon: (codigo: string) => `/app/unirse/${encodeURIComponent(codigo)}`,
   buscar: (q = '') => (q ? `/app/buscar?q=${encodeURIComponent(q)}` : '/app/buscar'),
   perfil: '/app/perfil',
   canal: (serverId: string, canalId: string) => `/app/s/${serverId}/c/${canalId}`,

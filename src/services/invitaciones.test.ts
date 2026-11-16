@@ -10,7 +10,7 @@ import { useDatosStore } from '../store/datosStore'
 import { registro, reiniciar } from '../test/firestoreMock'
 import { iniciarComoYo, poblarServidor } from '../test/fixtures'
 import { esperarServidor } from './firestore/escuchas'
-import { crearCodigo, inviteService, leerCodigo } from './invitaciones'
+import { crearCodigo, enlaceInvitacion, inviteService, leerCodigo, recordarInvitacion } from './invitaciones'
 
 const CODIGO = 'arte-digital-5mz8'
 
@@ -118,5 +118,51 @@ describe('inviteService', () => {
 
   it('getByServer es null si no se creó ninguna invitación en la sesión', async () => {
     expect(await inviteService.getByServer('arte')).toBeNull()
+  })
+
+  it('create (propietario o admin) guarda las siete claves con la vista previa real y 7 días de vigencia', async () => {
+    poblarServidor('A', [['yo', 'admin']], [], 'Club de Lectura')
+    const inv = await inviteService.create('A')
+    expect(inv).toMatchObject({ servidorId: 'A', invitaUid: 'yo', expiraEn: '7 días' })
+    // crearSlug quita palabras cortas como "de"
+    expect(inv.codigo).toMatch(/^club-lectura-[a-z0-9]{12}$/)
+
+    const [e] = registro.escrituras
+    expect(e).toMatchObject({ op: 'set', ruta: `invitaciones/${inv.codigo}` })
+    expect(Object.keys(e.datos!).sort()).toEqual(['creadaEn', 'expiraEn', 'invitaUid', 'servidorColor', 'servidorId', 'servidorIniciales', 'servidorNombre'])
+    expect(e.datos).toMatchObject({ servidorId: 'A', invitaUid: 'yo', creadaEn: 'MARCA_SERVIDOR', servidorNombre: 'Club de Lectura', servidorIniciales: 'SS', servidorColor: '#6366f1' })
+    const vence = (e.datos!.expiraEn as { toMillis: () => number }).toMillis() - Date.now()
+    // las reglas aceptan hasta 8 días
+    expect(vence).toBeGreaterThan(6.9 * 24 * 3_600_000)
+    expect(vence).toBeLessThanOrEqual(7 * 24 * 3_600_000)
+
+    // queda recordada para la sesión
+    expect(await inviteService.getByServer('A')).toMatchObject({ codigo: inv.codigo, expiraEn: '7 días' })
+  })
+
+  it('create: un miembro recibe 403 y un servidor que no está en la caché 404, sin escribir', async () => {
+    poblarServidor('A', [['otra', 'propietario'], ['yo', 'miembro']])
+    await expect(inviteService.create('A')).rejects.toMatchObject({ status: 403 })
+    await expect(inviteService.create('Z')).rejects.toMatchObject({ status: 404 })
+    expect(registro.escrituras).toEqual([])
+  })
+
+  it('create traduce el rechazo de las reglas a ApiError', async () => {
+    poblarServidor('A', [['yo', 'propietario']])
+    registro.falla = { code: 'permission-denied' }
+    await expect(inviteService.create('A')).rejects.toMatchObject({ status: 403 })
+  })
+
+  it('getByServer no devuelve una invitación recordada que ya venció', async () => {
+    recordarInvitacion({ codigo: 'viejo-codigo-0000', servidorId: 'A', invitaUid: 'yo', expiraEn: '7 días', enLinea: 0, enLlamada: 0 }, Date.now() - 1000)
+    expect(await inviteService.getByServer('A')).toBeNull()
+  })
+})
+
+describe('enlaceInvitacion', () => {
+  it('usa el dominio donde corre la app y leerCodigo lo entiende de vuelta', () => {
+    const enlace = enlaceInvitacion(CODIGO)
+    expect(enlace).toBe(`${window.location.origin}/i/${CODIGO}`)
+    expect(leerCodigo(enlace)).toBe(CODIGO)
   })
 })
